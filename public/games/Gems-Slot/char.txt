@@ -1,0 +1,16 @@
+char.png
+	size: 1010, 537
+	filter: Linear, Linear
+	pma: true
+	scale: 0.5
+Generative Fill 2
+	bounds: 2, 2, 609, 533
+Generative Fill 3
+	bounds: 868, 339, 126, 196
+Layer 2
+	bounds: 613, 106, 253, 429
+Layer 3
+	bounds: 868, 195, 142, 140
+	rotate: 90
+Layer 4
+	bounds: 613, 16, 149, 88

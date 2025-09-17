@@ -1,0 +1,59 @@
+Сгенерируй для меня сайт по тематике социальное казино. Суть сайта - бесплатные слот игры. На сайте нельзя выиграть реальные деньги и нельзя ничего купить. Сайт имеет только ознакомительную (демо) версию слот игры, чтобы пользователи без риска могли ознакомиться с слот играми.
+Сайт должен иметь полноценную структуру. Например блоки: Hero, about, cards, contacts, faq, features, paralaks, stats, footer, header. Я хочу, чтобы в сайте было минимум 8 блоков. Сайт должен быть наполнен контентом и не выглядеть сыро и пусто. Можешь также использовать какие-то символы из базы гугла, чтобы сайт выглядел более наполненным.
+Очень важно, чтобы в сайте было упоминание несколько раз о том, что сайт только для совершеннолетних и на сайте нельзя ничего купить.
+Сайт должен быть на английском языке.
+Визуально сайт должен быть современный, красивый, красочный, как сайт бесплатного онлайн казино.
+Так же оптимизируй сайт по СЕО. Чтобы все было четко. Чтобы были какие-то заголовки в тематике социального казино. Описания и прочее.
+В сайте используй 10 картинок. Они будут загружены в отдельную папку image в папке с сайтом. Все картинки имеют название по очереди от 1 до 10. Формат картинок webp
+Добавь фавикон в сайт.
+Также на сайте будет одна демо игра. Игра находится в папке game в корневой папке сайта. Так что на нашем сайте должна быть кнопка, которая предложит игроку поиграть.
+Добавь также меню на сайте, но пусть оно будет не на отдельные страницы, а просто якорями в рамках нашего сайта, но на разные разделы лендинга.
+Обязательно нужно будет добавить в сайт эти разделы:
+Terms & Conditions
+Privacy Policy
+Responsible Gaming
+Ну и в футере нужно уместить еще раз текст, который напомнит, что сайт только для совершеннолетних игроков + что сайт не дает возможности заработать денег. Вот пример такого текста:
+This is a social gaming platform intended for an adult audience (18+) for amusement purposes only. The games do not offer "real money gambling" or an opportunity to win real money or prizes. Practice or success at social casino gaming does not imply future success at "real money gambling."
+Добавь всплывающее окно кукисов. 
+ 
+
+
+
+
+
+
+
+Stwórz nowoczesną, przejrzystą i w pełni responsywną stronę internetową w języku polskim o tematyce ranking sportowych barów w Polsce.
+Strona powinna mieć biały, czysty i elegancki design, z kolorowymi akcentami sportowymi (np. zielony, czerwony lub niebieski).
+
+Struktura strony:
+
+Header – logo, menu (Home, Ranking, O nas, Kontakt).
+
+Hero Section – duży nagłówek: „Najlepsze Sport Bary w Polsce”, podtytuł: „Poznaj miejsca, gdzie emocje sportowe łączą się z wyjątkową atmosferą”. Tło jasne, ze zdjęciem kibiców lub baru.
+
+Ranking Barów – karty z nazwą baru, zdjęciem, lokalizacją, oceną (gwiazdki), krótkim opisem i przyciskiem „Zobacz więcej”.
+
+Mapa Polski – interaktywna mapa z zaznaczonymi barami (Warszawa, Kraków, Wrocław, Gdańsk, Poznań itp.).
+
+Dlaczego warto wybrać nasz ranking? – sekcja z ikonami i krótkimi zaletami (np. Rzetelne Opinie, Najlepsze Lokale, Atmosfera Kibiców).
+
+Opinie Użytkowników – slider z recenzjami odwiedzających bary.
+
+FAQ – najczęściej zadawane pytania (np. „Jak wybieramy bary?”, „Czy ranking jest aktualizowany?”).
+
+Kontakt – formularz kontaktowy + dane.
+
+Footer – linki, social media, informacja o prawach autorskich.
+
+Ważne:
+
+Strona nie promuje hazardu online – ma charakter wyłącznie informacyjny o barach sportowych.
+
+Teksty SEO: frazy „sport bary w Polsce”, „najlepsze bary sportowe”, „ranking barów sportowych”.
+
+Styl: nowoczesny, prosty, czytelny.
+
+
+
+Дальше могу доделать: маршрут editor/:siteId и дашборд “My Sites” (поиск/фильтр), либо перейти к Фазе 2 (ревизии + ассеты). делай ето потом к фазе 2 перейдем 
