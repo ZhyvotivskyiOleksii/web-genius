@@ -54,16 +54,15 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const isGameSite = websiteTypes.includes('Game');
 
     // --- Step 1: Read Libraries (Images and Games) ---
-    let imagePaths: string[] = Array.from({ length: 10 }, (_, i) => `image/${i + 1}.webp`);
+    let imagePaths: string[] = [];
     try {
       const casinoImageDir = path.join(process.cwd(), 'public', 'images', 'img-casino');
-      const extra = fs.readdirSync(casinoImageDir)
+      imagePaths = fs.readdirSync(casinoImageDir)
         .filter(file => /\.(jpg|jpeg|png|webp|gif)$/i.test(file))
-        .map(file => `images/img-casino/${file}`);
-      imagePaths = Array.from(new Set([...imagePaths, ...extra]));
-      console.log(`Prepared image set of ${imagePaths.length} paths.`);
+        .map(file => `images/img-casino/${file}`); // Relative path for reliability
+      console.log(`Found ${imagePaths.length} images to use.`);
     } catch (error) {
-      console.warn('Could not read casino images. Using default image placeholders image/1.webp…image/10.webp.');
+      console.warn('Could not read casino images.');
     }
 
     let gameFolders: string[] = [];
@@ -79,7 +78,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
 
     // --- Step 2: AI Content Generation ---
     console.log('Step 2.1: Getting site structure...');
-    const structureResult: FlowResult<SiteStructure> = await generateSiteStructure({ prompt, websiteTypes });
+    const structureResult: FlowResult<SiteStructure> = await generateSiteStructure({ prompt });
     const structure = structureResult;
     if (!structure || !structure.sections || structure.sections.length === 0) {
       throw new Error('The AI architect failed to create a site plan.');
@@ -91,7 +90,6 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const themeToUse = structure.theme || { primaryColor: "indigo-500", font: "Inter" };
     const usedImagePaths = new Set<string>();
     const sectionResults = [];
-    let imageIndex = 0;
 
     const queue = [...structure.sections];
     const worker = async () => {
@@ -99,13 +97,11 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         const section = queue.shift();
         if (!section) continue;
 
-        let assignedImage: string | undefined = undefined;
-        if (imagePaths.length > 0) {
-          assignedImage = imagePaths[imageIndex % imagePaths.length];
-          imageIndex += 1;
-          usedImagePaths.add(assignedImage);
+        let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
+        if (randomImageUrl) {
+          usedImagePaths.add(randomImageUrl);
         }
-        const res = await generateHtmlForSection({ section, theme: themeToUse, imageUrl: assignedImage });
+        const res = await generateHtmlForSection({ section, theme: themeToUse, imageUrl: randomImageUrl });
         sectionResults.push(res);
         if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
         if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;

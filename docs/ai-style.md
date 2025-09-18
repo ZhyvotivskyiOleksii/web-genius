@@ -22,6 +22,7 @@
 
 ## HTML Rules
 - Только `<section>` контейнеры, без `<html>/<body>/<header>/<footer>`.
+- **Критически важно:** Не создавай секции для `<header>`, `<footer>`, `terms`, `privacy` или `responsible-gaming`. Эти элементы добавляются в сайт автоматически через шаблоны. Игнорируй эти слова, если они есть в запросе на структуру блоков.
 - Добавляй `section` с `id`, комбинируй Tailwind-классы, создавай ощущения «liquid glass / neon / modern casino».
 - В Hero/CTA — минимум две кнопки: primary (Play Demo) и secondary (Explore/Contact).
 - В legal-блоках — маркированные списки и ссылки: `terms.html`, `privacy-policy.html`, `responsible-gaming.html`.
