@@ -38,7 +38,7 @@ import {
   Palette,
   X,
   Package,
-  MousePointerSquareDashed,
+  MousePointerSquare,
   Trash2,
 } from 'lucide-react';
 import {
@@ -2618,7 +2618,7 @@ export function SitePreview({
                   }`}
                   onClick={() => setInspectorEnabled((prev) => !prev)}
                 >
-                  <MousePointerSquareDashed className="h-4 w-4" />
+                  <MousePointerSquare className="h-4 w-4" />
                   <span className="text-sm font-medium">Select</span>
                 </Button>
               </TooltipTrigger>

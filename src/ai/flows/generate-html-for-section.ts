@@ -39,23 +39,22 @@ const sectionPrompt = ai.definePrompt({
   input: { schema: SectionHtmlInputSchema },
   output: { schema: SectionHtmlOutputSchema },
   prompt: `Ты — элитный фронтенд-разработчик, мастер TailwindCSS. Создай HTML-код для одной секции сайта.
-- НЕ используй \`<html>\`, \`<body>\`, \`<style>\` теги. Только HTML-код для секции.
-- Используй семантические теги (\`<section>\`, \`<h2>\`, и т.д.).
-- Сделай дизайн современным, адаптивным и красивым.
-- Используй акцентный цвет: \`{{theme.primaryColor}}\`.
-- **ВАЖНО: Главному тегу <section> ОБЯЗАТЕЛЬНО добавь id, равный типу секции. Пример: \`<section id="{{section.type}}">\`.**
-- **Если тип секции 'hero', сделай её полноэкранной, добавив классы \`min-h-screen flex flex-col justify-center\`**.
+- НЕ используй теги <html>, <head>, <body>, <header>, <footer>, <nav>, <style> — только содержимое секции.
+- Верхний элемент: <section id="{{section.type}}" class="...">…</section> с уникальным, насыщенным дизайном.
+- Используй семантические теги, смелые сетки, градиенты, иконки, микроанимации (классы Tailwind).
+- Акцентный цвет: {{theme.primaryColor}} (добавляй классы типа text-{{theme.primaryColor}}/bg-{{theme.primaryColor}}/from-{{theme.primaryColor}}/to-… ).
+- Для hero/CTA обязательно добавляй кнопки Play Demo/Explore, ведущие к game.html или якорям.
+- На релевантных секциях явно повторяй дисклеймеры: 18+, без реальных выигрышей.
+- Если передан imageUrl, вставь <img src="{{imageUrl}}" alt="..."> с описательным alt (не более одного крупного изображения).
+- Для legal-секций добавь краткие списки bullet-пунктов и ссылки на terms.html, privacy-policy.html, responsible-gaming.html.
+- Каждый блок должен отличаться по композиции: карточки, timeline, диаграммы, стеклянные панели и т.п.
+- Верни строго JSON { "htmlContent": "..." }.
 
-{{#if imageUrl}}
-**ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЙ ЭТО ИЗОБРАЖЕНИЕ:** \`{{imageUrl}}\`. Вставь его в тег \`<img src="{{imageUrl}}">\`. Придумай осмысленный alt-текст, що описує типове зображення для казино (наприклад, "Яскравий ігровий автомат у казино").
-{{/if}}
-
-**Задание:**
-- Тип секции: \`{{section.type}}\`
-- Заголовок: \`{{section.title}}\`
-- Детали: \`{{section.details}}\`
-
-Выдай только HTML-код в поле "htmlContent" JSON-ответа.`,
+Данные блока:
+- Тип: {{section.type}}
+- Заголовок: {{section.title}}
+- Дополнительно: {{section.details}}
+`,
 });
 
 // Genkit-флоу

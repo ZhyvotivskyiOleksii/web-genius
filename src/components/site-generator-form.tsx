@@ -121,7 +121,6 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
                         onChange={(e) => setPrompt(e.target.value)}
                         autoComplete="off"
                       />
-                     <input type="hidden" name="prompt" value={prompt} />
                      <Button 
                         formAction={enhanceFormAction}
                         type="submit"

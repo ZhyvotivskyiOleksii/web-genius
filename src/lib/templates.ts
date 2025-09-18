@@ -12,20 +12,19 @@ export const getIndexHtmlTemplate = (title: string, allSectionsHtml: string, web
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkfQKb4Z1Z8S+9C0Q5K5jEJQWv5GqQKZ0fZkqG6Yc4nV7YhZ+YB+mwkDw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="icon" type="image/webp" href="image/1.webp" />
     <link rel="stylesheet" href="styles/style.css">
 </head>
-<body class="bg-slate-900 text-gray-200 font-sans">
+<body class="bg-slate-900 text-gray-200 font-sans" data-has-game="${websiteTypes.includes('Game')}">
     <header id="header" class="bg-slate-900/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-40 transition-shadow duration-300">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
-                <a href="index.html" class="text-white font-bold text-xl">${title}</a>
+                <a href="index.html" class="inline-flex items-center gap-3 text-white font-bold text-xl tracking-tight">
+                    <span class="text-3xl">🎰</span>
+                    <span>${title}</span>
+                </a>
                 <nav class="hidden md:block">
-                    <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="index.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Home</a>
-                        ${websiteTypes.includes('Game') ? '<a href="game.html" class="text-indigo-400 font-bold hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm">Play Game!</a>' : ''}
-                        <a href="#features" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Features</a>
-                        <a href="#contact" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Contact</a>
-                    </div>
+                    <div id="desktop-nav-links" class="ml-10 flex items-center space-x-4"></div>
                 </nav>
                 <div class="-mr-2 flex md:hidden">
                     <button type="button" id="burger-menu" class="p-2 inline-flex items-center justify-center rounded-md text-gray-400 hover:text-white focus:outline-none">
@@ -37,16 +36,16 @@ export const getIndexHtmlTemplate = (title: string, allSectionsHtml: string, web
         </div>
     </header>
     
-    <div id="mobile-nav" class="mobile-nav-hidden">
-        <nav class="flex flex-col items-center justify-center h-full gap-y-8">
-            <a href="index.html" class="text-gray-300 hover:text-white text-3xl font-bold">Home</a>
-            ${websiteTypes.includes('Game') ? '<a href="game.html" class="text-indigo-400 hover:text-white text-3xl font-bold">Play Game!</a>' : ''}
-            <a href="#features" class="text-gray-300 hover:text-white text-3xl font-bold">Features</a>
-            <a href="#contact" class="text-gray-300 hover:text-white text-3xl font-bold">Contact</a>
+    <div id="mobile-nav" class="mobile-nav mobile-nav-hidden">
+        <nav>
+            <ul id="mobile-nav-links" class="w-full"></ul>
         </nav>
     </div>
 
     <main class="pt-16">
+        <div class="bg-amber-500/10 border-b border-amber-500/30 py-3 text-center px-4 text-sm sm:text-base text-amber-200 font-semibold uppercase tracking-wide">
+          Social casino for adults (18+). No real-money gambling. Practice plays only.
+        </div>
         ${allSectionsHtml}
     </main>
 
@@ -240,7 +239,69 @@ document.addEventListener('DOMContentLoaded', function () {
     const burgerMenu = document.getElementById('burger-menu');
     const burgerIcon = document.getElementById('burger-icon');
     const mobileNav = document.getElementById('mobile-nav');
+    const desktopNavLinks = document.getElementById('desktop-nav-links');
+    const mobileNavLinks = document.getElementById('mobile-nav-links');
+    const hasGameDemo = document.body.dataset.hasGame === 'true';
+
+    const navItems: Array<{ href: string; label: string; external?: boolean }> = [];
+    const seenSections = new Set<string>();
+    document.querySelectorAll('main section[id]').forEach(section => {
+        const id = section.id.trim();
+        if (!id || seenSections.has(id)) return;
+        seenSections.add(id);
+        const heading = section.querySelector('h1, h2, h3');
+        const labelRaw = heading ? heading.textContent || id : id;
+        const label = labelRaw.replace(/\s+/g, ' ').trim() || id.replace(/[-_]+/g, ' ');
+        navItems.push({ href: `#${id}`, label });
+    });
+
+    if (!navItems.length) {
+        navItems.push({ href: '#hero', label: 'Home' });
+    }
+
+    if (hasGameDemo) {
+        navItems.push({ href: 'game.html', label: 'Play Demo' });
+    }
+    navItems.push(
+        { href: 'terms.html', label: 'Terms' },
+        { href: 'privacy-policy.html', label: 'Privacy' },
+        { href: 'responsible-gaming.html', label: 'Responsible' },
+    );
+
+    const renderDesktopNav = () => {
+        if (!desktopNavLinks) return;
+        desktopNavLinks.innerHTML = '';
+        navItems.forEach(item => {
+            const link = document.createElement('a');
+            link.className = 'nav-link';
+            link.textContent = item.label;
+            link.href = item.href;
+            desktopNavLinks.appendChild(link);
+        });
+    };
+
+    const renderMobileNav = () => {
+        if (!mobileNavLinks) return;
+        mobileNavLinks.innerHTML = '';
+        navItems.forEach(item => {
+            const li = document.createElement('li');
+            li.className = 'w-full';
+            const link = document.createElement('a');
+            link.className = 'mobile-nav-link block w-full';
+            link.textContent = item.label;
+            link.href = item.href;
+            li.appendChild(link);
+            mobileNavLinks.appendChild(li);
+        });
+    };
+
+    renderDesktopNav();
+    renderMobileNav();
+
     if (burgerMenu && mobileNav && burgerIcon) {
+        const directions = ['mobile-nav-direction-left', 'mobile-nav-direction-right', 'mobile-nav-direction-top', 'mobile-nav-direction-bottom'];
+        const chosen = directions[Math.floor(Math.random() * directions.length)];
+        mobileNav.classList.add(chosen);
         const toggleMenu = () => {
             const isNavOpen = mobileNav.classList.contains('mobile-nav-visible');
             mobileNav.classList.toggle('mobile-nav-visible', !isNavOpen);
@@ -329,21 +390,76 @@ document.addEventListener('DOMContentLoaded', function () {
 
 export const stylesCssTemplate = `
 body.overflow-hidden { overflow: hidden; }
-.mobile-nav-hidden {
+
+.nav-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.45rem 0.8rem;
+    border-radius: 9999px;
+    font-size: 0.85rem;
+    color: rgba(226,232,240,0.82);
+    transition: all 0.25s ease;
+}
+.nav-link:hover {
+    color: #ffffff;
+    background-color: rgba(148,163,184,0.2);
+}
+
+.mobile-nav {
     position: fixed;
-    top: 0;
-    left: 0;
+    inset: 0;
     width: 100%;
     height: 100vh;
-    background-color: rgba(15, 23, 42, 0.98);
-    backdrop-filter: blur(8px);
-    z-index: 30;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s ease-in-out;
+    background: radial-gradient(circle at top, rgba(30,41,59,0.96), rgba(15,23,42,0.98));
+    backdrop-filter: blur(12px);
+    z-index: 40;
+    transition: transform 0.45s cubic-bezier(0.25,0.8,0.25,1), opacity 0.4s ease;
 }
+
+.mobile-nav nav {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: clamp(2.5rem, 8vw, 4rem);
+}
+.mobile-nav nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+}
+.mobile-nav nav li + li {
+    margin-top: 1rem;
+}
+
+.mobile-nav-link {
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    font-weight: 700;
+    color: rgba(226,232,240,0.85);
+    letter-spacing: 0.06em;
+    transition: color 0.3s ease;
+}
+.mobile-nav-link:hover { color: #fff; }
+
+.mobile-nav-hidden { opacity: 0; pointer-events: none; }
 .mobile-nav-visible { opacity: 1; pointer-events: auto; }
+
+.mobile-nav-direction-left { display: flex; justify-content: flex-start; align-items: stretch; transform: translateX(-100%); }
+.mobile-nav-direction-left nav { align-items: flex-start; text-align: left; width: min(78vw, 360px); margin-left: clamp(2rem, 8vw, 5rem); }
+
+.mobile-nav-direction-right { display: flex; justify-content: flex-end; align-items: stretch; transform: translateX(100%); }
+.mobile-nav-direction-right nav { align-items: flex-end; text-align: right; width: min(78vw, 360px); margin-right: clamp(2rem, 8vw, 5rem); }
+
+.mobile-nav-direction-top { display: flex; justify-content: center; align-items: flex-start; transform: translateY(-100%); }
+.mobile-nav-direction-bottom { display: flex; justify-content: center; align-items: flex-end; transform: translateY(100%); }
+.mobile-nav-direction-top nav,
+.mobile-nav-direction-bottom nav { width: min(92vw, 520px); text-align: center; }
+
+.mobile-nav-visible.mobile-nav-direction-left,
+.mobile-nav-visible.mobile-nav-direction-right,
+.mobile-nav-visible.mobile-nav-direction-top,
+.mobile-nav-visible.mobile-nav-direction-bottom {
+    transform: translate(0,0);
+}
 `;
