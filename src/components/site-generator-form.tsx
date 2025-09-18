@@ -73,7 +73,7 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
 
   return (
     <div className="w-full max-w-2xl">
-      <Card className="w-full shadow-2xl backdrop-blur-sm bg-card/80">
+      <Card className="w-full shadow-2xl backdrop-blur-lg bg-black/40 border border-white/10">
         <CardHeader className="text-center">
           <div className="flex justify-center items-center gap-2 mb-2">
             <Sparkles className="h-8 w-8 text-primary" />
@@ -101,7 +101,7 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
                   name="siteName"
                   defaultValue={state.site?.domain || ''}
                   placeholder="e.g., My Awesome Coffee Shop"
-                  className="text-base"
+                  className="text-base bg-black/20 border-white/10 focus-visible:ring-1 focus-visible:ring-primary/50"
                   required
                   autoComplete="off"
                 />
@@ -115,7 +115,7 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
                         id="prompt"
                         name="prompt"
                         placeholder="e.g., A minimalist coffee shop in Tokyo specializing in single-origin beans."
-                        className="min-h-[100px] text-base pr-12 no-scrollbar"
+                        className="min-h-[120px] text-base pr-12 no-scrollbar bg-black/20 border-white/10 focus-visible:ring-1 focus-visible:ring-primary/50"
                         required
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
@@ -141,17 +141,23 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
                  </div>
               </div>
               
-               <div className="space-y-2">
+               <div className="space-y-3 pt-2">
                 <Label className="text-base">Website Type (Optional)</Label>
-                <div className="flex flex-wrap gap-4">
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="game" name="websiteTypes" value="Game" />
-                    <Label htmlFor="game" className="text-sm font-normal">Game</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="sport-bar" name="websiteTypes" value="Sport bar Poland" />
-                    <Label htmlFor="sport-bar" className="text-sm font-normal">Sport bar Poland</Label>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Label
+                    htmlFor="game"
+                    className="flex items-center gap-3 rounded-lg border-2 border-muted bg-popover/50 p-4 cursor-pointer transition-colors hover:bg-accent/10 has-[:checked]:border-primary has-[:checked]:bg-primary/10"
+                  >
+                    <Checkbox id="game" name="websiteTypes" value="Game" className="h-5 w-5" />
+                    <span className="font-medium">Social Casino Game</span>
+                  </Label>
+                  <Label
+                    htmlFor="sport-bar"
+                    className="flex items-center gap-3 rounded-lg border-2 border-muted bg-popover/50 p-4 cursor-pointer transition-colors hover:bg-accent/10 has-[:checked]:border-primary has-[:checked]:bg-primary/10"
+                  >
+                    <Checkbox id="sport-bar" name="websiteTypes" value="Sport bar Poland" className="h-5 w-5" />
+                    <span className="font-medium">Sport Bar Ranking (PL)</span>
+                  </Label>
                 </div>
               </div>
 

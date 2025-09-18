@@ -243,8 +243,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const mobileNavLinks = document.getElementById('mobile-nav-links');
     const hasGameDemo = document.body.dataset.hasGame === 'true';
 
-    const navItems: Array<{ href: string; label: string; external?: boolean }> = [];
-    const seenSections = new Set<string>();
+    const navItems = [];
+    const seenSections = new Set();
     document.querySelectorAll('main section[id]').forEach(section => {
         const id = section.id.trim();
         if (!id || seenSections.has(id)) return;
@@ -252,7 +252,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const heading = section.querySelector('h1, h2, h3');
         const labelRaw = heading ? heading.textContent || id : id;
         const label = labelRaw.replace(/\s+/g, ' ').trim() || id.replace(/[-_]+/g, ' ');
-        navItems.push({ href: `#${id}`, label });
+        navItems.push({ href: '#' + id, label: label });
     });
 
     if (!navItems.length) {

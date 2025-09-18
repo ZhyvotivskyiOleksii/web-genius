@@ -38,7 +38,7 @@ import {
   Palette,
   X,
   Package,
-  MousePointerSquare,
+  MousePointerSquareDashed as MousePointerSquare,
   Trash2,
 } from 'lucide-react';
 import {
@@ -2487,7 +2487,7 @@ export function SitePreview({
           </div>
         </DialogContent>
       </Dialog>
-      )}
+      
 
       <Dialog open={isProjectsOpen} onOpenChange={setIsProjectsOpen}>
         <DialogContent className="max-w-2xl rounded-2xl border border-white/10 bg-[#0f1011]/90 backdrop-blur-md">
@@ -2906,8 +2906,9 @@ export function SitePreview({
                     ref={iframeRef}
                   />
                 ) : (
-                  <div className="flex-1 flex items-center justify-center">
-                    <p>Loading preview...</p>
+                  <div className="flex flex-col items-center justify-center h-full gap-4 text-slate-300">
+                    <div className="h-14 w-14 rounded-full border-2 border-indigo-500/40 border-t-indigo-400 animate-spin"></div>
+                    <p className="text-sm uppercase tracking-[0.3em] text-indigo-200">Loading</p>
                   </div>
                 )}
               </div>
