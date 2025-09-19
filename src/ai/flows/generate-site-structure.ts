@@ -1,61 +1,78 @@
-// File: src/ai/flows/generate-site-structure.ts
+// Файл: src/ai/flows/generate-site-structure.ts
 'use server';
 
 import { ai } from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
 import { z } from 'zod';
 
+// Описываем, как должна выглядеть секция в нашем плане
 const SectionSchema = z.object({
-  type: z.string().describe("Тип секції в kebab-case (наприклад, 'hero', 'about', 'feature-grid', 'cta')"),
-  title: z.string().describe("Основний заголовок для цієї секції"),
-  details: z.string().optional().describe("Додаткові деталі, ключові слова або підзаголовок для контенту"),
+  type: z.string().describe("Тип секции, например 'hero', 'features', 'testimonials', 'contact'"),
+  title: z.string().describe("Основной заголовок для этой секции"),
+  details: z.string().optional().describe("Дополнительные детали или подзаголовок"),
+});
+
+// Описываем полную структуру сайта
+const UsageSchema = z.object({
+  inputTokens: z.number().int().optional(),
+  outputTokens: z.number().int().optional(),
+  totalTokens: z.number().int().optional(),
 });
 
 const SiteStructureOutputSchema = z.object({
-  siteName: z.string().describe("Креативна назва сайту англійською"),
-  metaDescription: z.string().describe("Короткий SEO-опис сайту (150-160 символів) англійською"),
   theme: z.object({
-    primaryColor: z.string().describe("Основний акцентний колір TailwindCSS (наприклад, 'indigo-500')"),
-    font: z.string().describe("Назва шрифту з Google Fonts (наприклад, 'Inter')"),
+    primaryColor: z.string().describe("Основной акцентный цвет (например, 'indigo-500')"),
+    font: z.string().describe("Название шрифта из Google Fonts (например, 'Inter')"),
   }),
   sections: z.array(SectionSchema),
 });
 export type SiteStructure = z.infer<typeof SiteStructureOutputSchema>;
 
+const SiteStructureFlowOutputSchema = SiteStructureOutputSchema.extend({
+  usage: UsageSchema.optional(),
+  model: z.string().optional(),
+});
+export type SiteStructureFlowResult = z.infer<typeof SiteStructureFlowOutputSchema>;
+
 const SiteStructureInputSchema = z.object({
   prompt: z.string(),
-  websiteTypes: z.array(z.string()).optional(),
 });
 
+// Промпт для нашего "архитектора"
 const structurePrompt = ai.definePrompt({
   name: 'siteStructurePrompt',
   input: { schema: SiteStructureInputSchema },
   output: { schema: SiteStructureOutputSchema },
-  prompt: `Ты — AI-архитектор веб-сайтов. Проанализируй запрос и верни JSON-план сайта.
-- Придумай креативное название сайта.
-- Напиши краткое SEO-описание (meta description) до 160 символов.
-- **Порядок секций критически важен.** Первая секция ОБЯЗАТЕЛЬНО должна быть типа 'hero'.
-- Если пользователь указал точное число секций (например, "8 блоков"), создай ровно столько. Если нет, создай 8-10 секций.
-- Если в 'websiteTypes' есть "Game" или "Casino", обязательно добавь в план отдельные секции с типами: 'terms', 'privacy', и 'responsible-gaming'. Эти секции должны идти после основных.
-- **Для всех секций игрового сайта** в поле 'details' добавляй напоминание: "Упомянуть 18+ и отсутствие реальных денег".
+  prompt: `Ты — AI-архитектор веб-сайтов. Проанализируй запрос пользователя и создай план сайта в формате JSON. НЕ генерируй HTML. Твоя задача — только создать структуру. Если пользователь явно указал, сколько секций или блоков нужно сделать, соблюдай это число (например, «1 секция» значит только одну секцию). В остальных случаях предложи 3-5 самых подходящих секций.
 
-Запрос пользователя: "{{prompt}}"
-Типы сайта: {{#if websiteTypes}}{{websiteTypes}}{{else}}(не указаны){{/if}}`,
+Запрос пользователя: "{{prompt}}"`,
 });
 
+// Genkit-флоу
 export const generateSiteStructure = ai.defineFlow(
   {
     name: 'generateSiteStructure',
     inputSchema: SiteStructureInputSchema,
-    outputSchema: SiteStructureOutputSchema.extend({
-      usage: z.any().optional(), model: z.string().optional()
-    }),
+    outputSchema: SiteStructureFlowOutputSchema,
   },
   async (input) => {
-    const response = await structurePrompt(input);
-    if (!response.output) {
-      throw new Error('AI architect failed to return a valid structure.');
+    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    let lastErr: any = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const response = await structurePrompt(input);
+        const output = response.output!;
+        return {
+          ...output,
+          usage: response.usage || undefined,
+          model: response.model || MODEL_NAME,
+        };
+      } catch (err) {
+        lastErr = err;
+        const backoff = Math.min(3000, 500 * attempt);
+        await sleep(backoff);
+      }
     }
-    return { ...response.output, usage: response.usage, model: response.model || MODEL_NAME };
+    throw lastErr || new Error('Failed to generate site structure');
   }
 );

@@ -1,4 +1,4 @@
-// File: src/ai/flows/generate-html-for-section.ts
+// Файл: src/ai/flows/generate-html-for-section.ts
 'use server';
 
 import { ai } from '@/ai/genkit';
@@ -14,7 +14,13 @@ const SectionHtmlInputSchema = z.object({
   theme: z.object({
     primaryColor: z.string(),
   }),
-  imageUrl: z.string().optional().describe("URL випадкового зображення для вставки"),
+  imageUrl: z.string().optional().describe("URL випадкового зображення, яке потрібно вставити"),
+});
+
+const UsageSchema = z.object({
+  inputTokens: z.number().int().optional(),
+  outputTokens: z.number().int().optional(),
+  totalTokens: z.number().int().optional(),
 });
 
 const SectionHtmlOutputSchema = z.object({
@@ -22,35 +28,42 @@ const SectionHtmlOutputSchema = z.object({
 });
 export type SectionHtml = z.infer<typeof SectionHtmlOutputSchema>;
 
+const SectionHtmlFlowOutputSchema = SectionHtmlOutputSchema.extend({
+  usage: UsageSchema.optional(),
+  model: z.string().optional(),
+});
+export type SectionHtmlFlowResult = z.infer<typeof SectionHtmlFlowOutputSchema>;
+
 const sectionPrompt = ai.definePrompt({
   name: 'sectionHtmlPrompt',
   input: { schema: SectionHtmlInputSchema },
   output: { schema: SectionHtmlOutputSchema },
-  prompt: `Ты — элитный фронтенд-разработчик и копирайтер. Создай HTML-код для ОДНОЙ секции сайта.
-- **Пиши оригинальный и вовлекающий текст на английском.** НЕ ИСПОЛЬЗУЙ 'Lorem Ipsum'.
-- **НЕ используй теги \`<html>, <head>, <body>, <header>, <footer>, <nav>, <style>\`** — только содержимое секции.
-- Верхний элемент должен быть: \`<section id="{{section.type}}" class="...">…</section>\`.
-- Если тип секции 'hero', сделай её полноэкранной (\`min-h-screen\`).
-- Если это секции 'terms', 'privacy', или 'responsible-gaming', создай хорошо структурированный текстовый блок с заголовками и списками, используя классы Tailwind Typography (\`prose prose-invert\`).
-- Используй разнообразные компоненты: карточки, аккордеоны для FAQ, таймлайны.
-- Вставляй кнопки, ведущие к \`game.html\` или якорям (\`#contact\`), где это уместно.
-- Если передан \`imageUrl\`, используй его в \`<img src="{{imageUrl}}">\`.
+  prompt: `Ты — элитный фронтенд-разработчик, мастер TailwindCSS. Создай HTML-код для одной секции сайта.
+- НЕ используй \`<html>\`, \`<body>\`, \`<style>\` теги. Только HTML-код для секции.
+- Используй семантические теги (\`<section>\`, \`<h2>\`, и т.д.).
+- Сделай дизайн современным, адаптивным и красивым.
+- Используй акцентный цвет: \`{{theme.primaryColor}}\`.
+- **ВАЖНО: Главному тегу <section> ОБЯЗАТЕЛЬНО добавь id, равный типу секции. Пример: \`<section id="{{section.type}}">\`.**
+- **Если тип секции 'hero', сделай её полноэкранной, добавив классы \`min-h-screen flex flex-col justify-center\`**.
 
-**Данные для секции:**
-- Тип: \`{{section.type}}\`
+{{#if imageUrl}}
+**ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЙ ЭТО ИЗОБРАЖЕНИЕ:** \`{{imageUrl}}\`. Вставь его в тег \`<img src="{{imageUrl}}">\`. Придумай осмысленный alt-текст, що описує типове зображення для казино (наприклад, "Яскравий ігровий автомат у казино").
+{{/if}}
+
+**Задание:**
+- Тип секции: \`{{section.type}}\`
 - Заголовок: \`{{section.title}}\`
-- Ключевые детали от архитектора: \`{{section.details}}\`
+- Детали: \`{{section.details}}\`
 
-Верни строго JSON { "htmlContent": "..." }.`,
+Выдай только HTML-код в поле "htmlContent" JSON-ответа.`,
 });
 
+// Genkit-флоу
 export const generateHtmlForSection = ai.defineFlow(
   {
     name: 'generateHtmlForSection',
     inputSchema: SectionHtmlInputSchema,
-    outputSchema: SectionHtmlOutputSchema.extend({
-      usage: z.any().optional(), model: z.string().optional()
-    }),
+    outputSchema: SectionHtmlFlowOutputSchema,
   },
   async (input) => {
     const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -75,6 +88,7 @@ export const generateHtmlForSection = ai.defineFlow(
     }
     const safeTitle = input.section.title || input.section.type || 'Section';
     const safeDetails = input.section.details || '';
+    // Додаємо id також у резервний HTML для надійності
     const htmlFallback = `
 <section class="py-12" id="${input.section.type || 'fallback'}">
   <div class="max-w-5xl mx-auto px-4">

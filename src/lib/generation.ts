@@ -3,82 +3,14 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-
 import { generateGamePageContent, GamePageContent } from '@/ai/flows/generate-game-page-content';
 import { generatePolicyContent, PolicyContent } from '@/ai/flows/generate-policy-content';
 import { marked } from 'marked';
 import { generateSiteStructure, SiteStructure } from '@/ai/flows/generate-site-structure';
 import { generateHtmlForSection } from '@/ai/flows/generate-html-for-section';
-import { getIndexHtmlTemplate, getGamePageTemplate, getLegalPageTemplate, stylesCssTemplate } from '@/lib/templates';
+import { getIndexHtmlTemplate, getGamePageTemplate, getPrivacyPolicyTemplate, mainJsTemplate, stylesCssTemplate } from '@/lib/templates';
 
-const EXTERNAL_OR_DATA_URL = /^(?:https?:)?\/\//i;
-const DEFAULT_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1280&q=80';
-
-function patchSectionImages(html: string, fallbackUrl?: string) {
-  if (!html) return html;
-  let output = html;
-
-  const replacement = fallbackUrl || DEFAULT_IMAGE_FALLBACK;
-
-  if (replacement) {
-    output = output.replace(
-      /background(?:-image)?\s*:\s*url\((['"]?)(?!https?:|data:|\/\/)([^'"\)]+)\1\)/gi,
-      (_match) => `background-image:url('${replacement}')`
-    );
-  }
-
-  output = output.replace(/<img\b([^>]*?)src=["'](.*?)["']([^>]*?)>/gi, (match, pre, src, post) => {
-    const trimmed = (src || '').trim();
-    const shouldReplace = !trimmed || trimmed === '#' || (!EXTERNAL_OR_DATA_URL.test(trimmed) && !trimmed.startsWith('data:'));
-    if (!shouldReplace && !replacement) return match;
-    const finalSrc = shouldReplace ? replacement : trimmed;
-    if (!finalSrc) return match;
-
-    let tag = `<img${pre}src="${finalSrc}"${post}`;
-    if (!/loading\s*=/.test(pre + post)) {
-      tag = tag.replace(/>$/, ' loading="lazy">');
-    }
-    if (!/alt\s*=/.test(pre + post)) {
-      tag = tag.replace(/>$/, ' alt="Illustration">');
-    }
-    if (/class\s*=/.test(pre + post)) {
-      tag = tag.replace(/class=("|')([^"']*)(\1)/, (_m, quote, cls) => `class=${quote}${cls} object-cover${quote}`);
-    } else {
-      tag = tag.replace(/>$/, ' class="object-cover">');
-    }
-    if (/style\s*=/.test(pre + post)) {
-      tag = tag.replace(/style=("|')([^"']*)(\1)/, (_m, quote, style) => {
-        const addition = 'object-fit:cover;width:100%;height:100%;';
-        return style.includes('object-fit') ? `style=${quote}${style}${quote}` : `style=${quote}${style}${style.endsWith(';') ? '' : ';'}${addition}${quote}`;
-      });
-    } else {
-      tag = tag.replace(/>$/, ' style="object-fit:cover;width:100%;height:100%;">');
-    }
-    return tag;
-  });
-
-  return output;
-}
-
-type FlowResult<T> = T & {
-  usage?: { inputTokens?: number; outputTokens?: number };
-  model?: string;
-};
-export type TokenUsageSummary = {
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  model?: string;
-};
-export type Site = {
-  domain: string;
-  files: Record<string, Buffer | string>;
-  history: string[];
-  types?: string[];
-  usage?: TokenUsageSummary;
-};
-
-// Допоміжна функція для рекурсивного читання файлів з папки гри
+// Helper function to recursively read files from the game folder
 async function getFilesRecursively(dir: string): Promise<Record<string, Buffer>> {
   const fileList: Record<string, Buffer> = {};
   const readDir = async (currentDir: string, relativeDir: string) => {
@@ -98,19 +30,90 @@ async function getFilesRecursively(dir: string): Promise<Record<string, Buffer>>
   return fileList;
 }
 
+// Type definitions (unchanged)
+type FlowResult<T> = T & {
+  usage?: { inputTokens?: number; outputTokens?: number };
+  model?: string;
+};
+export type TokenUsageSummary = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  model?: string;
+};
+export type Site = {
+  domain: string;
+  files: Record<string, Buffer | string>;
+  history: string[];
+  types?: string[];
+  usage?: TokenUsageSummary;
+};
+
+function extractRequestedSectionCount(input: string): number | null {
+  if (!input) return null;
+  const normalized = input.toLowerCase();
+  const digitMatch = normalized.match(/(\d+)\s*(?:section|sections|секц|раздел|block|blocks|блок)/);
+  if (digitMatch) {
+    const count = Number.parseInt(digitMatch[1], 10);
+    if (Number.isFinite(count) && count > 0 && count < 50) {
+      return count;
+    }
+  }
+  const wordToNumber: Record<string, number> = {
+    one: 1,
+    single: 1,
+    'один': 1,
+    'одна': 1,
+    'одну': 1,
+    'одной': 1,
+    two: 2,
+    'два': 2,
+    'две': 2,
+    'двух': 2,
+    three: 3,
+    'три': 3,
+    'трех': 3,
+    'трёх': 3,
+    four: 4,
+    'четыре': 4,
+    five: 5,
+    'пять': 5,
+    six: 6,
+    'шесть': 6,
+    seven: 7,
+    'семь': 7,
+    eight: 8,
+    'восемь': 8,
+    nine: 9,
+    'девять': 9,
+    ten: 10,
+    'десять': 10,
+  };
+  const wordMatch = normalized.match(/\b(один|одна|одну|одной|два|две|двух|три|трех|трёх|четыре|пять|шесть|семь|восемь|девять|десять|one|two|three|four|five|six|seven|eight|nine|ten|single)\b[^\S\r\n]*(?:секц|section|раздел|block|блок)/);
+  if (wordMatch) {
+    const value = wordToNumber[wordMatch[1]];
+    if (typeof value === 'number') {
+      return value;
+    }
+  }
+  return null;
+}
+
 export async function generateSingleSite(prompt: string, siteName: string, websiteTypes: string[] = [], history: string[] = []): Promise<Site | null> {
   try {
     const isGameSite = websiteTypes.includes('Game');
-    
-    // --- Етап 1: Зчитування бібліотек (зображення та ігри) ---
+
+    // --- Step 1: Read Libraries (Images and Games) ---
     let imagePaths: string[] = [];
     try {
       const casinoImageDir = path.join(process.cwd(), 'public', 'images', 'img-casino');
       imagePaths = fs.readdirSync(casinoImageDir)
         .filter(file => /\.(jpg|jpeg|png|webp|gif)$/i.test(file))
-        .map(file => `images/img-casino/${file}`); // Відносний шлях
+        .map(file => `images/img-casino/${file}`); // Relative path for reliability
       console.log(`Found ${imagePaths.length} images to use.`);
-    } catch (error) { console.warn('Could not read casino images.'); }
+    } catch (error) {
+      console.warn('Could not read casino images.');
+    }
 
     let gameFolders: string[] = [];
     const sourceGamesDir = path.join(process.cwd(), 'public', 'games');
@@ -118,69 +121,82 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       try {
         gameFolders = fs.readdirSync(sourceGamesDir).filter(f => fs.statSync(path.join(sourceGamesDir, f)).isDirectory());
         console.log(`Found ${gameFolders.length} games:`, gameFolders);
-      } catch (error) { console.warn('Could not read games directory.'); }
+      } catch (error) {
+        console.warn('Could not read games directory.');
+      }
     }
 
-    // --- Етап 2: Генерація контенту через AI ---
+    // --- Step 2: AI Content Generation ---
     console.log('Step 2.1: Getting site structure...');
-    const structureResult: FlowResult<SiteStructure> = await generateSiteStructure({ prompt, websiteTypes });
+    const structureResult: FlowResult<SiteStructure> = await generateSiteStructure({ prompt });
     const structure = structureResult;
     if (!structure || !structure.sections || structure.sections.length === 0) {
       throw new Error('The AI architect failed to create a site plan.');
     }
+    const desiredSections: { type: string; title: string; details?: string }[] = [
+      { type: 'hero', title: `Experience ${siteName}` },
+      { type: 'about', title: 'About Our Social Casino' },
+      { type: 'features', title: 'Highlights & Features' },
+      { type: 'stats', title: 'Player Stats & Milestones' },
+      { type: 'parallax', title: 'Immersive Moments' },
+      { type: 'faq', title: 'Frequently Asked Questions' },
+      { type: 'responsible', title: 'Responsible Gaming' },
+      { type: 'cta', title: 'Try the Demo Slots' },
+    ];
+    const explicitSectionCount = extractRequestedSectionCount(prompt);
+    if (explicitSectionCount != null && structure.sections.length > explicitSectionCount) {
+      structure.sections = structure.sections.slice(0, explicitSectionCount);
+    }
+    const normalized = new Set(structure.sections.map(s => s.type.toLowerCase()));
+    const limit = explicitSectionCount ?? 8;
+    for (const section of desiredSections) {
+      if (structure.sections.length >= limit) break;
+      if (!normalized.has(section.type.toLowerCase())) {
+        structure.sections.push({ type: section.type, title: section.title, details: section.details });
+        normalized.add(section.type.toLowerCase());
+      }
+    }
     let totalInputTokens = structureResult.usage?.inputTokens ?? 0;
     let totalOutputTokens = structureResult.usage?.outputTokens ?? 0;
-    
-    const mainSections = structure.sections.filter(s => !['terms', 'privacy', 'responsible-gaming'].includes(s.type));
-    const legalSections = structure.sections.filter(s => ['terms', 'privacy', 'responsible-gaming'].includes(s.type));
 
-    console.log(`Step 2.2: Generating ${mainSections.length} main sections in parallel...`);
+    console.log(`Step 2.2: Generating ${structure.sections.length} sections sequentially to avoid rate limits...`);
+    const themeToUse = structure.theme || { primaryColor: "indigo-500", font: "Inter" };
     const usedImagePaths = new Set<string>();
-    const mainSectionResults = await Promise.all(
-      mainSections.map(async (section) => {
-        let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
-        if (randomImageUrl) usedImagePaths.add(randomImageUrl);
-        const result = await generateHtmlForSection({ section, theme: structure.theme, imageUrl: randomImageUrl });
-        if (result.usage?.inputTokens) totalInputTokens += result.usage.inputTokens;
-        if (result.usage?.outputTokens) totalOutputTokens += result.usage.outputTokens;
-        const patchedHtml = patchSectionImages(result.htmlContent, randomImageUrl);
-        return { html: patchedHtml, model: result.model };
-      })
-    );
-    const allSectionsHtml = mainSectionResults.map(r => r.html).join('\n\n');
+    const sectionResults = [];
 
-    // --- Етап 3: Збірка фінального об'єкта `files` ---
-    console.log('Step 3: Assembling final files object...');
-    const title = structure.siteName || siteName;
-    const domain = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 50);
-    
-    const files: Record<string, Buffer | string> = { 'favicon.ico': '' };
-
-    files['index.html'] = getIndexHtmlTemplate(title, structure.metaDescription, allSectionsHtml, websiteTypes);
-
-    for (const legalSection of legalSections) {
-        console.log(`Generating content for ${legalSection.type} page...`);
-        const lang = (legalSection.type === 'privacy' && isGameSite) ? 'English' : 'Ukrainian';
-        
-        let contentHtml = '';
-        if (legalSection.type === 'privacy') {
-            const policyResult: FlowResult<PolicyContent> = await generatePolicyContent({ siteName: title, siteDescription: prompt, language: lang });
-            if (policyResult.usage?.inputTokens) totalInputTokens += policyResult.usage.inputTokens;
-            if (policyResult.usage?.outputTokens) totalOutputTokens += policyResult.usage.outputTokens;
-            contentHtml = policyResult.sections.map(s => {
-                const parsedContent = marked.parse(s.content);
-                return `<section id="${s.id}"><h2 class="text-3xl font-bold text-white !mt-12 !mb-4">${s.title}</h2>${parsedContent}</section>`;
-            }).join('\n');
-        } else {
-            const pageResult = await generateHtmlForSection({ section: legalSection, theme: structure.theme });
-            if (pageResult.usage?.inputTokens) totalInputTokens += pageResult.usage.inputTokens;
-            if (pageResult.usage?.outputTokens) totalOutputTokens += pageResult.usage.outputTokens;
-            contentHtml = pageResult.htmlContent;
-        }
-
-        files[`${legalSection.type}.html`] = getLegalPageTemplate(title, structure.metaDescription, legalSection.title, contentHtml);
+    // Generate sections sequentially to avoid hitting rate limits.
+    for (const section of structure.sections) {
+      let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
+      if (randomImageUrl) {
+        usedImagePaths.add(randomImageUrl);
+      }
+      const res = await generateHtmlForSection({ section, theme: themeToUse, imageUrl: randomImageUrl });
+      sectionResults.push(res);
+      if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
+      if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
     }
+
+    // Join the HTML content, now guaranteed to be in the correct order
+    const allSectionsHtml = sectionResults.map(result => result.htmlContent).join('\n\n');
+
+    const policyLanguage = isGameSite ? 'English' : 'Ukrainian';
+    console.log(`Step 2.3: Generating unique privacy policy in ${policyLanguage}...`);
+    const policyResult: FlowResult<PolicyContent> = await generatePolicyContent({ siteName, siteDescription: prompt, language: policyLanguage });
+    if (policyResult.usage?.inputTokens) totalInputTokens += policyResult.usage.inputTokens;
+    if (policyResult.usage?.outputTokens) totalOutputTokens += policyResult.usage.outputTokens;
+    const policyContentHtml = policyResult.sections.map(section => {
+      const contentHtml = marked.parse(section.content);
+      return `<section><h2 id="${section.id}" class="text-3xl font-bold text-white !mt-12 !mb-4">${section.title}</h2>${contentHtml}</section>`;
+    }).join('\n\n');
+
+    // --- Step 3: Assemble Final Files Object ---
+    console.log('Step 3: Assembling final files object...');
+    const title = siteName || "My Website";
+    const domain = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 50) || 'my-website';
     
+    const files: Record<string, Buffer | string> = {};
+    
+    // Game page logic
     if (isGameSite && gameFolders.length > 0) {
       console.log('Step 3.1: Generating game page...');
       const randomGameFolder = gameFolders[Math.floor(Math.random() * gameFolders.length)];
@@ -190,23 +206,31 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       if (gamePageContentResult.usage?.inputTokens) totalInputTokens += gamePageContentResult.usage.inputTokens;
       if (gamePageContentResult.usage?.outputTokens) totalOutputTokens += gamePageContentResult.usage.outputTokens;
 
-      files['game.html'] = getGamePageTemplate(title, structure.metaDescription, gamePageContentResult.title, gameIframePath, gamePageContentResult.disclaimerHtml);
+      files['game.html'] = getGamePageTemplate(title, gamePageContentResult.title, gameIframePath, gamePageContentResult.disclaimerHtml);
 
+      // Recursively get all game files and add them to the files object
       const gameFilesDir = path.join(sourceGamesDir, randomGameFolder);
       const gameFiles = await getFilesRecursively(gameFilesDir);
       for (const [filePath, content] of Object.entries(gameFiles)) {
-          files[`games/${randomGameFolder}/${filePath}`] = content;
+        files[`games/${randomGameFolder}/${filePath}`] = content;
       }
     }
 
+    // Add standard files
+    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes);
+    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, domain, policyContentHtml);
+    files['scripts/main.js'] = mainJsTemplate;
     files['styles/style.css'] = stylesCssTemplate;
     
+    // Add used images
     console.log(`Adding ${usedImagePaths.size} used images to the files object...`);
     for (const webPath of usedImagePaths) {
       const localPath = path.join(process.cwd(), 'public', webPath);
       try {
         files[webPath] = fs.readFileSync(localPath);
-      } catch (error) { console.warn(`Could not read image file at ${localPath}`); }
+      } catch (error) {
+        console.warn(`Could not read image file at ${localPath}`);
+      }
     }
 
     console.log('Generation successful!');
@@ -214,7 +238,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
       totalTokens: totalInputTokens + totalOutputTokens,
-      model: structureResult.model || mainSectionResults.find(r => r.model)?.model,
+      model: structureResult.model || sectionResults[0]?.model,
     };
 
     return { domain, files, history: [...history, prompt], types: websiteTypes, usage };
