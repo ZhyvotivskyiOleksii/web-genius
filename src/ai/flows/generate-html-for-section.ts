@@ -1,4 +1,4 @@
-// Файл: src/ai/flows/generate-html-for-section.ts
+// File: src/ai/flows/generate-html-for-section.ts
 'use server';
 
 import { ai } from '@/ai/genkit';
@@ -14,13 +14,7 @@ const SectionHtmlInputSchema = z.object({
   theme: z.object({
     primaryColor: z.string(),
   }),
-  imageUrl: z.string().optional().describe("URL випадкового зображення, яке потрібно вставити"),
-});
-
-const UsageSchema = z.object({
-  inputTokens: z.number().int().optional(),
-  outputTokens: z.number().int().optional(),
-  totalTokens: z.number().int().optional(),
+  imageUrl: z.string().optional().describe("URL випадкового зображення для вставки"),
 });
 
 const SectionHtmlOutputSchema = z.object({
@@ -28,41 +22,35 @@ const SectionHtmlOutputSchema = z.object({
 });
 export type SectionHtml = z.infer<typeof SectionHtmlOutputSchema>;
 
-const SectionHtmlFlowOutputSchema = SectionHtmlOutputSchema.extend({
-  usage: UsageSchema.optional(),
-  model: z.string().optional(),
-});
-export type SectionHtmlFlowResult = z.infer<typeof SectionHtmlFlowOutputSchema>;
-
 const sectionPrompt = ai.definePrompt({
   name: 'sectionHtmlPrompt',
   input: { schema: SectionHtmlInputSchema },
   output: { schema: SectionHtmlOutputSchema },
-  prompt: `Ты — элитный фронтенд-разработчик, мастер TailwindCSS. Создай HTML-код для одной секции сайта.
-- НЕ используй теги <html>, <head>, <body>, <header>, <footer>, <nav>, <style> — только содержимое секции.
-- Верхний элемент: <section id="{{section.type}}" class="...">…</section> с уникальным, насыщенным дизайном.
-- Используй семантические теги, смелые сетки, градиенты, иконки, микроанимации (классы Tailwind).
-- Акцентный цвет: {{theme.primaryColor}} (добавляй классы типа text-{{theme.primaryColor}}/bg-{{theme.primaryColor}}/from-{{theme.primaryColor}}/to-… ).
-- Для hero/CTA обязательно добавляй кнопки Play Demo/Explore, ведущие к game.html или якорям.
-- На релевантных секциях явно повторяй дисклеймеры: 18+, без реальных выигрышей.
-- Если передан imageUrl, вставь <img src="{{imageUrl}}" alt="..."> с описательным alt (не более одного крупного изображения).
-- Для legal-секций добавь краткие списки bullet-пунктов и ссылки на terms.html, privacy-policy.html, responsible-gaming.html.
-- Каждый блок должен отличаться по композиции: карточки, timeline, диаграммы, стеклянные панели и т.п.
-- Верни строго JSON { "htmlContent": "..." }.
+  prompt: `Ты — элитный фронтенд-разработчик и копирайтер. Создай HTML-код для ОДНОЙ секции сайта.
+- **Пиши оригинальный и вовлекающий текст на английском.** НЕ ИСПОЛЬЗУЙ 'Lorem Ipsum'.
+- **НЕ используй теги \`<html>, <head>, <body>, <header>, <footer>, <nav>, <style>\`** — только содержимое секции.
+- Верхний элемент должен быть: \`<section id="{{section.type}}" class="...">…</section>\`.
+- Если тип секции 'hero', сделай её полноэкранной (\`min-h-screen\`).
+- Если это секции 'terms', 'privacy', или 'responsible-gaming', создай хорошо структурированный текстовый блок с заголовками и списками, используя классы Tailwind Typography (\`prose prose-invert\`).
+- Используй разнообразные компоненты: карточки, аккордеоны для FAQ, таймлайны.
+- Вставляй кнопки, ведущие к \`game.html\` или якорям (\`#contact\`), где это уместно.
+- Если передан \`imageUrl\`, используй его в \`<img src="{{imageUrl}}">\`.
 
-Данные блока:
-- Тип: {{section.type}}
-- Заголовок: {{section.title}}
-- Дополнительно: {{section.details}}
-`,
+**Данные для секции:**
+- Тип: \`{{section.type}}\`
+- Заголовок: \`{{section.title}}\`
+- Ключевые детали от архитектора: \`{{section.details}}\`
+
+Верни строго JSON { "htmlContent": "..." }.`,
 });
 
-// Genkit-флоу
 export const generateHtmlForSection = ai.defineFlow(
   {
     name: 'generateHtmlForSection',
     inputSchema: SectionHtmlInputSchema,
-    outputSchema: SectionHtmlFlowOutputSchema,
+    outputSchema: SectionHtmlOutputSchema.extend({
+      usage: z.any().optional(), model: z.string().optional()
+    }),
   },
   async (input) => {
     const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
@@ -87,7 +75,6 @@ export const generateHtmlForSection = ai.defineFlow(
     }
     const safeTitle = input.section.title || input.section.type || 'Section';
     const safeDetails = input.section.details || '';
-    // Додаємо id також у резервний HTML для надійності
     const htmlFallback = `
 <section class="py-12" id="${input.section.type || 'fallback'}">
   <div class="max-w-5xl mx-auto px-4">

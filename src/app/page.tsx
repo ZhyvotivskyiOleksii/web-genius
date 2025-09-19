@@ -407,8 +407,8 @@ export default function Home() {
             <PopoverContent align="end" sideOffset={14} className="w-[380px] p-0 border border-white/10 bg-[#080a12]/95 text-white shadow-[0_24px_60px_rgba(5,10,30,0.55)] backdrop-blur-xl">
               <div className="relative overflow-hidden">
                 <div className="pointer-events-none absolute inset-0 opacity-80">
-                  <div className="absolute -top-20 right-0 h-56 w-56 rounded-full bg-primary/30 blur-3xl" />
-                  <div className="absolute bottom-[-140px] left-[-60px] h-72 w-72 rounded-full bg-[#6a5cff]/20 blur-3xl" />
+                  <div className="absolute -top-24 right-[-80px] h-64 w-64 rounded-full bg-[#7f5af0]/45 blur-3xl" />
+                  <div className="absolute bottom-[-160px] left-[-120px] h-80 w-80 rounded-full bg-[#0b031a]/90 blur-3xl" />
                 </div>
                 <div className="relative space-y-5 p-5">
                   <div className="flex items-center gap-3">
@@ -450,7 +450,7 @@ export default function Home() {
                       <p className="mt-1 text-xs text-white/60">Generate your first website to see it here.</p>
                       <Button
                         size="sm"
-                        className="mt-4 bg-gradient-to-r from-[#7f5af0] via-[#9b6dff] to-[#5ad1ff] text-white shadow-[0_12px_28px_rgba(120,90,255,0.35)] transition hover:shadow-[0_18px_38px_rgba(120,90,255,0.5)]"
+                        className="mt-4 bg-gradient-to-r from-[#7f5af0]/85 via-[#5a31f0]/75 to-[#050109]/92 text-white shadow-[0_18px_38px_rgba(90,60,255,0.45)] transition hover:brightness-110"
                         onClick={handleStartBuilding}
                       >
                         Start building
@@ -477,7 +477,7 @@ export default function Home() {
                           <div className="mt-4 flex flex-wrap items-center gap-2">
                             <Button
                               size="sm"
-                              className="bg-gradient-to-r from-[#7f5af0] via-[#9b6dff] to-[#5a8bff] text-white hover:opacity-90"
+                              className="bg-gradient-to-r from-[#7f5af0]/85 via-[#5a31f0]/75 to-[#050109]/92 text-white shadow-[0_18px_38px_rgba(90,60,255,0.45)] hover:brightness-110"
                               onClick={() => openProject(featuredProject)}
                             >
                               Resume in editor
@@ -638,7 +638,7 @@ export default function Home() {
               </svg>
               Continue with Google
             </Button>
-            <p className="text-sm text-muted-foreground">После входа покажем аватар и дадим доступ к настройкам публикации.</p>
+            <p className="text-sm text-muted-foreground">Sign in to unlock the studio, save your magic, and publish in seconds.</p>
           </div>
         </DialogContent>
       </Dialog>

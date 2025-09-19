@@ -1,89 +1,61 @@
-// Файл: src/ai/flows/generate-site-structure.ts
+// File: src/ai/flows/generate-site-structure.ts
 'use server';
 
 import { ai } from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
 import { z } from 'zod';
 
-// Описываем, как должна выглядеть секция в нашем плане
 const SectionSchema = z.object({
-  type: z.string().describe("Тип секции, например 'hero', 'features', 'testimonials', 'contact'"),
-  title: z.string().describe("Основной заголовок для этой секции"),
-  details: z.string().optional().describe("Дополнительные детали или подзаголовок"),
-});
-
-// Описываем полную структуру сайта
-const UsageSchema = z.object({
-  inputTokens: z.number().int().optional(),
-  outputTokens: z.number().int().optional(),
-  totalTokens: z.number().int().optional(),
+  type: z.string().describe("Тип секції в kebab-case (наприклад, 'hero', 'about', 'feature-grid', 'cta')"),
+  title: z.string().describe("Основний заголовок для цієї секції"),
+  details: z.string().optional().describe("Додаткові деталі, ключові слова або підзаголовок для контенту"),
 });
 
 const SiteStructureOutputSchema = z.object({
+  siteName: z.string().describe("Креативна назва сайту англійською"),
+  metaDescription: z.string().describe("Короткий SEO-опис сайту (150-160 символів) англійською"),
   theme: z.object({
-    primaryColor: z.string().describe("Основной акцентный цвет (например, 'indigo-500')"),
-    font: z.string().describe("Название шрифта из Google Fonts (например, 'Inter')"),
+    primaryColor: z.string().describe("Основний акцентний колір TailwindCSS (наприклад, 'indigo-500')"),
+    font: z.string().describe("Назва шрифту з Google Fonts (наприклад, 'Inter')"),
   }),
   sections: z.array(SectionSchema),
 });
 export type SiteStructure = z.infer<typeof SiteStructureOutputSchema>;
-
-const SiteStructureFlowOutputSchema = SiteStructureOutputSchema.extend({
-  usage: UsageSchema.optional(),
-  model: z.string().optional(),
-});
-export type SiteStructureFlowResult = z.infer<typeof SiteStructureFlowOutputSchema>;
 
 const SiteStructureInputSchema = z.object({
   prompt: z.string(),
   websiteTypes: z.array(z.string()).optional(),
 });
 
-// Промпт для нашего "архитектора"
 const structurePrompt = ai.definePrompt({
   name: 'siteStructurePrompt',
   input: { schema: SiteStructureInputSchema },
   output: { schema: SiteStructureOutputSchema },
-  prompt: `Ты — креативный AI-архитектор веб-сайтов. Проанализируй пользовательский запрос и верни JSON-план сайта.
-- Если пользователь явно указал количество секций или перечислил конкретные блоки, создай ровно их и в том порядке.
-- Если точного числа нет, предложи 8–10 разнообразных уникальных секций без дубликатов header.
-- Значение поля "type" пиши в kebab-case (hero, about, feature-grid, testimonial-slider, exclusive-offers, responsible, terms, privacy, call-to-action и т.д.).
-- Если тематика связана с казино/играми (по prompt или websiteTypes содержит "Game"/"Casino"), добавь отдельные секции для Terms & Conditions, Privacy Policy и Responsible Gaming, а также убедись, что в других секциях есть дисклеймер о 18+ и отсутствии реальных денег.
-- Если тематика иная (например, sport bar), адаптируй план под нее, не добавляй казино-специфику без необходимости.
-- Указывай в описании секции, какие визуальные приемы и данные стоит использовать (стеклянные карточки, параллакс, иконки, счетчики, истории и т.д.).
-- Всегда предусматривай блок с контактом/CTA и кнопку, ведущую на демо-игру, только если сайт действительно про игры.
-- НЕ добавляй header, footer, глобальную навигацию.
-- Возвращай строго валидный JSON, соответствующий схеме.
+  prompt: `Ты — AI-архитектор веб-сайтов. Проанализируй запрос и верни JSON-план сайта.
+- Придумай креативное название сайта.
+- Напиши краткое SEO-описание (meta description) до 160 символов.
+- **Порядок секций критически важен.** Первая секция ОБЯЗАТЕЛЬНО должна быть типа 'hero'.
+- Если пользователь указал точное число секций (например, "8 блоков"), создай ровно столько. Если нет, создай 8-10 секций.
+- Если в 'websiteTypes' есть "Game" или "Casino", обязательно добавь в план отдельные секции с типами: 'terms', 'privacy', и 'responsible-gaming'. Эти секции должны идти после основных.
+- **Для всех секций игрового сайта** в поле 'details' добавляй напоминание: "Упомянуть 18+ и отсутствие реальных денег".
 
-Пользовательский запрос: "{{prompt}}"
-Выбранные типы сайта: {{#if websiteTypes}}{{websiteTypes}}{{else}}(не выбраны){{/if}}`,
+Запрос пользователя: "{{prompt}}"
+Типы сайта: {{#if websiteTypes}}{{websiteTypes}}{{else}}(не указаны){{/if}}`,
 });
 
-// Genkit-флоу
 export const generateSiteStructure = ai.defineFlow(
   {
     name: 'generateSiteStructure',
     inputSchema: SiteStructureInputSchema,
-    outputSchema: SiteStructureFlowOutputSchema,
+    outputSchema: SiteStructureOutputSchema.extend({
+      usage: z.any().optional(), model: z.string().optional()
+    }),
   },
   async (input) => {
-    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
-    let lastErr: any = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const response = await structurePrompt(input);
-        const output = response.output!;
-        return {
-          ...output,
-          usage: response.usage || undefined,
-          model: response.model || MODEL_NAME,
-        };
-      } catch (err) {
-        lastErr = err;
-        const backoff = Math.min(3000, 500 * attempt);
-        await sleep(backoff);
-      }
+    const response = await structurePrompt(input);
+    if (!response.output) {
+      throw new Error('AI architect failed to return a valid structure.');
     }
-    throw lastErr || new Error('Failed to generate site structure');
+    return { ...response.output, usage: response.usage, model: response.model || MODEL_NAME };
   }
 );

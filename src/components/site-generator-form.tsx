@@ -7,9 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, Wand2 } from 'lucide-react';
+import { Loader2, Sparkles, Wand2, Check } from 'lucide-react';
 import { enhancePromptAction } from '@/app/actions';
-import { Checkbox } from './ui/checkbox';
+import { cn } from '@/lib/utils';
 
 function SubmitButton({ isPending, isAuthed, onRequireAuth }: { isPending: boolean; isAuthed: boolean; onRequireAuth?: () => void }) {
   return (
@@ -17,7 +17,10 @@ function SubmitButton({ isPending, isAuthed, onRequireAuth }: { isPending: boole
       type={isAuthed ? "submit" : "button"}
       onClick={!isAuthed ? onRequireAuth : undefined}
       disabled={isPending}
-      className="w-full text-lg py-6 font-headline"
+      className={cn(
+        "w-full text-lg py-6 font-headline text-white shadow-[0_20px_45px_rgba(90,50,255,0.35)] bg-gradient-to-r from-[#7f5af0]/80 via-[#5a31f0]/75 to-[#050109]/90 transition hover:brightness-110",
+        isPending ? "opacity-90" : ""
+      )}
     >
       {isPending ? (
         <>
@@ -44,6 +47,12 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
   const { toast } = useToast();
   const [prompt, setPrompt] = useState('');
   const [enhanceState, enhanceFormAction, isEnhancing] = useActionState(enhancePromptAction, initialEnhanceState);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
+
+  const typeOptions = [
+    { id: 'game', label: 'Social Casino Game', value: 'Game' },
+    { id: 'sport-bar', label: 'Sport Bar Ranking (PL)', value: 'Sport bar Poland' },
+  ];
   
   useEffect(() => {
     if (!state.success && state.error && !state.fieldErrors) {
@@ -70,6 +79,11 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
         });
     }
   }, [enhanceState, toast]);
+
+  useEffect(() => {
+    const initialType = state.site?.types?.[0];
+    setSelectedType(initialType ?? null);
+  }, [state.site?.types]);
 
   return (
     <div className="w-full max-w-2xl">
@@ -101,7 +115,7 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
                   name="siteName"
                   defaultValue={state.site?.domain || ''}
                   placeholder="e.g., My Awesome Coffee Shop"
-                  className="text-base bg-black/20 border-white/10 focus-visible:ring-1 focus-visible:ring-primary/50"
+                  className="text-base bg-black/25 border border-white/10 focus-visible:ring-0 focus-visible:border-white/10"
                   required
                   autoComplete="off"
                 />
@@ -115,7 +129,7 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
                         id="prompt"
                         name="prompt"
                         placeholder="e.g., A minimalist coffee shop in Tokyo specializing in single-origin beans."
-                        className="min-h-[120px] text-base pr-12 no-scrollbar bg-black/20 border-white/10 focus-visible:ring-1 focus-visible:ring-primary/50"
+                        className="min-h-[120px] text-base pr-12 no-scrollbar bg-black/25 border border-white/10 focus-visible:ring-0 focus-visible:border-white/10"
                         required
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
@@ -143,21 +157,39 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
               
                <div className="space-y-3 pt-2">
                 <Label className="text-base">Website Type (Optional)</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Label
-                    htmlFor="game"
-                    className="flex items-center gap-3 rounded-lg border-2 border-muted bg-popover/50 p-4 cursor-pointer transition-colors hover:bg-accent/10 has-[:checked]:border-primary has-[:checked]:bg-primary/10"
-                  >
-                    <Checkbox id="game" name="websiteTypes" value="Game" className="h-5 w-5" />
-                    <span className="font-medium">Social Casino Game</span>
-                  </Label>
-                  <Label
-                    htmlFor="sport-bar"
-                    className="flex items-center gap-3 rounded-lg border-2 border-muted bg-popover/50 p-4 cursor-pointer transition-colors hover:bg-accent/10 has-[:checked]:border-primary has-[:checked]:bg-primary/10"
-                  >
-                    <Checkbox id="sport-bar" name="websiteTypes" value="Sport bar Poland" className="h-5 w-5" />
-                    <span className="font-medium">Sport Bar Ranking (PL)</span>
-                  </Label>
+                <input type="hidden" name="websiteTypes" value={selectedType ?? ''} disabled={!selectedType} />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {typeOptions.map((option) => {
+                    const isActive = selectedType === option.value;
+                    return (
+                      <button
+                        key={option.id}
+                        type="button"
+                        onClick={() => setSelectedType((prev) => (prev === option.value ? null : option.value))}
+                        className={cn(
+                          'group flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-left text-sm font-medium text-white/80 transition-all duration-200 hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                          isActive
+                            ? 'border-transparent bg-gradient-to-r from-[#7f5af0]/75 via-[#5a31f0]/70 to-[#050109]/90 text-white shadow-[0_18px_40px_rgba(106,90,255,0.35)]'
+                            : ''
+                        )}
+                        aria-pressed={isActive}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span
+                            className={cn(
+                              'flex h-6 w-6 items-center justify-center rounded-full border border-white/20 bg-white/5 transition-all duration-200',
+                              isActive
+                                ? 'border-white bg-white text-black shadow-[0_8px_18px_rgba(255,255,255,0.35)]'
+                                : 'text-transparent group-hover:text-white/70'
+                            )}
+                          >
+                            <Check className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="tracking-tight">{option.label}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

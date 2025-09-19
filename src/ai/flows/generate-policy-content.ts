@@ -1,5 +1,5 @@
 // File: src/ai/flows/generate-policy-content.ts
-"use server";
+'use server';
 
 import { ai } from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
@@ -11,31 +11,17 @@ const PolicySectionSchema = z.object({
   content: z.string().describe("Детальний текст для цієї секції у форматі Markdown."),
 });
 
-const UsageSchema = z.object({
-  inputTokens: z.number().int().optional(),
-  outputTokens: z.number().int().optional(),
-  totalTokens: z.number().int().optional(),
-});
-
 const PolicyContentOutputSchema = z.object({
   sections: z.array(PolicySectionSchema).describe("Масив з 5-7 унікальних секцій для політики конфіденційності."),
 });
 export type PolicyContent = z.infer<typeof PolicyContentOutputSchema>;
 
-const PolicyContentFlowOutputSchema = PolicyContentOutputSchema.extend({
-  usage: UsageSchema.optional(),
-  model: z.string().optional(),
-});
-export type PolicyContentFlowResult = z.infer<typeof PolicyContentFlowOutputSchema>;
-
-// 1. ЗМІНА ТУТ: Додано поле `language`
 const PolicyContentInputSchema = z.object({
   siteName: z.string(),
   siteDescription: z.string(),
   language: z.string().optional().describe("Мова для генерації контенту (наприклад, 'English' або 'Ukrainian')"),
 });
 
-// 2. ЗМІНА ТУТ: Оновлено промпт, щоб він враховував мову
 const policyPrompt = ai.definePrompt({
   name: 'policyContentPrompt',
   input: { schema: PolicyContentInputSchema },
@@ -59,10 +45,12 @@ export const generatePolicyContent = ai.defineFlow(
   {
     name: 'generatePolicyContent',
     inputSchema: PolicyContentInputSchema,
-    outputSchema: PolicyContentFlowOutputSchema,
+    outputSchema: PolicyContentOutputSchema.extend({
+      usage: z.any().optional(),
+      model: z.string().optional(),
+    }),
   },
   async (input) => {
-    // ... (решта коду залишається без змін) ...
     console.log(`Generating policy content for: ${input.siteName} in ${input.language || 'default English'}`);
     const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
     let lastErr: any = null;
@@ -87,7 +75,7 @@ export const generatePolicyContent = ai.defineFlow(
     const sanitize = (s: string) => (s || '').toString().trim() || 'Our Website';
     const name = sanitize(input.siteName);
     const desc = sanitize(input.siteDescription);
-    const fallback: PolicyContentFlowResult = {
+    const fallback: PolicyContent = {
       sections: [
         { id: 'introduction', title: 'Introduction', content: `This Privacy Policy explains how ${name} ("we", "us") handles information. This site is described as: ${desc}. We strive to collect as little personal data as possible and use it only for the purposes described below.`},
         { id: 'data-collection', title: 'Information We Collect', content: `We may collect non‑identifying technical details such as browser type, device characteristics, and basic usage analytics. If you choose to contact us, we may also store your email address and message for support purposes.`},
@@ -97,8 +85,7 @@ export const generatePolicyContent = ai.defineFlow(
         { id: 'security', title: 'Data Security', content: `We apply reasonable administrative and technical safeguards to protect data. However, no method of transmission or storage is completely secure.`},
         { id: 'changes', title: 'Changes to This Policy', content: `We may update this Policy periodically. The latest version will always be available on this page. Continued use of ${name} after changes constitutes acceptance of the updated Policy.`},
       ],
-      model: MODEL_NAME,
     };
-    return fallback;
+    return { ...fallback, model: MODEL_NAME };
   }
 );
