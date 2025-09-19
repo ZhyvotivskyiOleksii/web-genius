@@ -11,26 +11,6 @@ import { generateHtmlForSection } from '@/ai/flows/generate-html-for-section';
 import { getIndexHtmlTemplate, getGamePageTemplate, getPrivacyPolicyTemplate, mainJsTemplate, stylesCssTemplate } from '@/lib/templates';
 import manifest from '@/lib/asset-manifest.json';
 
-// Helper function to recursively read files from the game folder
-async function getFilesRecursively(dir: string): Promise<Record<string, Buffer>> {
-  const fileList: Record<string, Buffer> = {};
-  const readDir = async (currentDir: string, relativeDir: string) => {
-    const files = await fs.promises.readdir(currentDir);
-    for (const file of files) {
-      const filePath = path.join(currentDir, file);
-      const fileStat = await fs.promises.stat(filePath);
-      const relativeFilePath = path.join(relativeDir, file);
-      if (fileStat.isDirectory()) {
-        await readDir(filePath, relativeFilePath);
-      } else {
-        fileList[relativeFilePath] = await fs.promises.readFile(filePath);
-      }
-    }
-  };
-  await readDir(dir, '');
-  return fileList;
-}
-
 // Type definitions (unchanged)
 type FlowResult<T> = T & {
   usage?: { inputTokens?: number; outputTokens?: number };
@@ -114,9 +94,9 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
 
     // --- Step 1: Read Libraries (Images and Games) via manifest ---
     const imagePaths = Array.isArray(assets.images) ? assets.images : [];
-    const gameFolders = Array.isArray(assets.games) ? assets.games : [];
+    const manifestGames = Array.isArray(assets.games) ? assets.games : [];
+    const gameFolders = manifestGames.filter(Boolean);
     console.log(`Using manifest: found ${imagePaths.length} images and ${gameFolders.length} games.`);
-    const sourceGamesDir = path.join(process.cwd(), 'public', 'games');
 
     // --- Step 2: AI Content Generation ---
     console.log('Step 2.1: Getting site structure...');
@@ -158,7 +138,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const themeToUse = structure.theme || { primaryColor: "indigo-500", font: "Inter" };
     const usedImagePaths = new Set<string>();
     const sectionResults: { html: string; model?: string }[] = [];
-    const CHUNK_SIZE = 3;
+    const CHUNK_SIZE = 4;
 
     for (let i = 0; i < mainSections.length; i += CHUNK_SIZE) {
       const slice = mainSections.slice(i, i + CHUNK_SIZE);
@@ -198,20 +178,17 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     if (isGameSite && gameFolders.length > 0) {
       console.log('Step 3.1: Generating game page...');
       const randomGameFolder = gameFolders[Math.floor(Math.random() * gameFolders.length)];
-      const gameIframePath = `games/${randomGameFolder}/game.html`;
+
+      const absoluteHost = process.env.NEXT_PUBLIC_GAME_BASE_URL || process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+      const gameIframePath = absoluteHost
+        ? `${absoluteHost.replace(/\/$/, '')}/games/${randomGameFolder}/game.html`
+        : `games/${randomGameFolder}/game.html`;
 
       const gamePageContentResult: FlowResult<GamePageContent> = await generateGamePageContent({ siteName: title });
       if (gamePageContentResult.usage?.inputTokens) totalInputTokens += gamePageContentResult.usage.inputTokens;
       if (gamePageContentResult.usage?.outputTokens) totalOutputTokens += gamePageContentResult.usage.outputTokens;
 
       files['game.html'] = getGamePageTemplate(title, gamePageContentResult.title, gameIframePath, gamePageContentResult.disclaimerHtml);
-
-      // Recursively get all game files and add them to the files object
-      const gameFilesDir = path.join(sourceGamesDir, randomGameFolder);
-      const gameFiles = await getFilesRecursively(gameFilesDir);
-      for (const [filePath, content] of Object.entries(gameFiles)) {
-        files[`games/${randomGameFolder}/${filePath}`] = content;
-      }
     }
 
     // Add standard files

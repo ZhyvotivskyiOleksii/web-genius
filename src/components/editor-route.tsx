@@ -75,30 +75,14 @@ export function EditorRoute({ siteId }: { siteId: string }) {
     })();
   }, [siteId]);
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#050109]">
-        <div className="flex flex-col items-center gap-4 text-white/80">
-          <div className="h-12 w-12 animate-spin rounded-full border-2 border-purple-500/40 border-t-purple-300" />
-          <p className="text-xs uppercase tracking-[0.4em] text-purple-200">Loading</p>
-        </div>
-      </div>
-    );
-  }
+  if (loading) return <div className="p-6 text-sm text-[#9da5b4]">Loading project…</div>;
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[#050109] p-6 text-center text-sm text-white/80">
-        <p className="mb-4 max-w-md text-rose-300">{error}</p>
-        <button
-          className="rounded-full bg-purple-600/80 px-4 py-2 text-white shadow-[0_18px_38px_rgba(90,60,255,0.35)] transition hover:bg-purple-500"
-          onClick={() => router.push('/')}
-        >
-          Back to Generator
-        </button>
-      </div>
-    );
-  }
+  if (error) return (
+    <div className="p-6 text-sm">
+      <p className="text-rose-400 mb-3">{error}</p>
+      <button className="px-3 py-2 rounded bg-[#2f3136] text-white/90" onClick={() => router.push("/")}>Back</button>
+    </div>
+  );
   if (!site) return null;
 
   return <SitePreview site={site} onBack={() => router.push("/")} initialSiteId={siteId} />;

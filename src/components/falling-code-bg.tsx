@@ -25,37 +25,47 @@ const CANDIDATES = [
 ];
 
 export function FallingCodeBg({ count = 10 }: { count?: number }) {
-  // Avoid SSR hydration mismatch: generate snippets only on client after mount
   const [items, setItems] = useState<Snippet[]>([]);
-  const [visible, setVisible] = useState(true);
+
   useEffect(() => {
-    const rnd = (min: number, max: number) => Math.random() * (max - min) + min;
-    const hues = [199, 262, 187, 210];
-    const snips = Array.from({ length: count }).map(() => ({
-      text: CANDIDATES[Math.floor(Math.random() * CANDIDATES.length)],
-      x: Math.random() < 0.5 ? rnd(8, 28) : rnd(72, 92), // по бокам формы
-      rot: rnd(-10, 10),
-      hue: hues[Math.floor(Math.random() * hues.length)],
-      dur: rnd(6.5, 9.5),
-      delay: rnd(0, 2.5),
-      size: rnd(12, 18),
-      start: `${rnd(12, 26)}vh`,
-      end: `${rnd(45, 62)}vh`,
-    }));
-    setItems(snips);
-    const handleHide = () => { setVisible(false); setItems([]); } // prevent stripes on reload/navigation
-    const visHandler = () => { if (document.visibilityState === 'hidden') handleHide(); };
+    const spawn = () => {
+      const rnd = (min: number, max: number) => Math.random() * (max - min) + min;
+      const hues = [199, 262, 187, 210];
+      const snips = Array.from({ length: count }).map(() => ({
+        text: CANDIDATES[Math.floor(Math.random() * CANDIDATES.length)],
+        x: Math.random() < 0.5 ? rnd(8, 28) : rnd(72, 92),
+        rot: rnd(-10, 10),
+        hue: hues[Math.floor(Math.random() * hues.length)],
+        dur: rnd(6.5, 9.5),
+        delay: rnd(0, 2.5),
+        size: rnd(12, 18),
+        start: `${rnd(12, 26)}vh`,
+        end: `${rnd(45, 62)}vh`,
+      }));
+      setItems(snips);
+    };
+
+    spawn();
+
+    const handleHide = () => setItems([]);
+    const handleShow = () => spawn();
+    const visHandler = () => {
+      if (document.visibilityState === 'hidden') handleHide();
+      else handleShow();
+    };
     document.addEventListener('visibilitychange', visHandler);
     window.addEventListener('beforeunload', handleHide);
     window.addEventListener('pagehide', handleHide as any);
+    window.addEventListener('pageshow', handleShow as any);
     return () => {
       document.removeEventListener('visibilitychange', visHandler);
       window.removeEventListener('beforeunload', handleHide);
       window.removeEventListener('pagehide', handleHide as any);
+      window.removeEventListener('pageshow', handleShow as any);
     };
   }, [count]);
 
-  if (!items.length || !visible) return null;
+  if (!items.length) return null;
 
   return (
     <div className="falling-code-layer fade-out" aria-hidden suppressHydrationWarning>
