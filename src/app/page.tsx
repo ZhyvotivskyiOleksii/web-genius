@@ -295,8 +295,28 @@ export default function Home() {
           }
           if (!id) { setShowPreview(true); return; }
           // Bulk upsert files
+          const cacheKey = `wg-cache-${id}`;
+          if (typeof window !== 'undefined') {
+            try {
+              sessionStorage.setItem(cacheKey, JSON.stringify({
+                domain: state.site.domain,
+                files: state.site.files,
+                history: state.site.history,
+                types: state.site.types || [],
+                usage: state.site.usage,
+              }));
+            } catch (cacheErr) {
+              console.warn('Failed to cache freshly generated site:', cacheErr);
+            }
+          }
+
           const rows = Object.entries(state.site.files).map(([path, content]) => ({ site_id: id!, path, content: String(content || ''), updated_by: userId }));
-          if (rows.length) await sb.from('site_files').upsert(rows, { onConflict: 'site_id,path' });
+          if (rows.length) {
+            const { error: filesErr } = await sb.from('site_files').upsert(rows, { onConflict: 'site_id,path' });
+            if (filesErr) {
+              console.error('site_files upsert failed:', filesErr);
+            }
+          }
           redirectedRef.current = true;
           router.push(`/editor/${id}`);
           setPendingGeneration(false);

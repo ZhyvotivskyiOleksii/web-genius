@@ -241,7 +241,9 @@ export async function generateWebsiteAction(prevState: any, formData: FormData) 
 
     const { siteName, prompt, websiteTypes, history: prevHistory } = validatedFields.data;
 
+    console.time('generate:full-site');
     const site = await generateSingleSite(prompt, siteName, websiteTypes, prevHistory);
+    console.timeEnd('generate:full-site');
     
     if (!site) {
       return {

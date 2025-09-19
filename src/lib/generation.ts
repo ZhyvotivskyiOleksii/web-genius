@@ -9,6 +9,7 @@ import { marked } from 'marked';
 import { generateSiteStructure, SiteStructure } from '@/ai/flows/generate-site-structure';
 import { generateHtmlForSection } from '@/ai/flows/generate-html-for-section';
 import { getIndexHtmlTemplate, getGamePageTemplate, getPrivacyPolicyTemplate, mainJsTemplate, stylesCssTemplate } from '@/lib/templates';
+import manifest from '@/lib/asset-manifest.json';
 
 // Helper function to recursively read files from the game folder
 async function getFilesRecursively(dir: string): Promise<Record<string, Buffer>> {
@@ -48,6 +49,13 @@ export type Site = {
   types?: string[];
   usage?: TokenUsageSummary;
 };
+
+type AssetManifest = {
+  images?: string[];
+  games?: string[];
+};
+
+const assets = manifest as AssetManifest;
 
 function extractRequestedSectionCount(input: string): number | null {
   if (!input) return null;
@@ -101,30 +109,14 @@ function extractRequestedSectionCount(input: string): number | null {
 
 export async function generateSingleSite(prompt: string, siteName: string, websiteTypes: string[] = [], history: string[] = []): Promise<Site | null> {
   try {
+    const startedAt = Date.now();
     const isGameSite = websiteTypes.includes('Game');
 
-    // --- Step 1: Read Libraries (Images and Games) ---
-    let imagePaths: string[] = [];
-    try {
-      const casinoImageDir = path.join(process.cwd(), 'public', 'images', 'img-casino');
-      imagePaths = fs.readdirSync(casinoImageDir)
-        .filter(file => /\.(jpg|jpeg|png|webp|gif)$/i.test(file))
-        .map(file => `images/img-casino/${file}`); // Relative path for reliability
-      console.log(`Found ${imagePaths.length} images to use.`);
-    } catch (error) {
-      console.warn('Could not read casino images.');
-    }
-
-    let gameFolders: string[] = [];
+    // --- Step 1: Read Libraries (Images and Games) via manifest ---
+    const imagePaths = Array.isArray(assets.images) ? assets.images : [];
+    const gameFolders = Array.isArray(assets.games) ? assets.games : [];
+    console.log(`Using manifest: found ${imagePaths.length} images and ${gameFolders.length} games.`);
     const sourceGamesDir = path.join(process.cwd(), 'public', 'games');
-    if (isGameSite) {
-      try {
-        gameFolders = fs.readdirSync(sourceGamesDir).filter(f => fs.statSync(path.join(sourceGamesDir, f)).isDirectory());
-        console.log(`Found ${gameFolders.length} games:`, gameFolders);
-      } catch (error) {
-        console.warn('Could not read games directory.');
-      }
-    }
 
     // --- Step 2: AI Content Generation ---
     console.log('Step 2.1: Getting site structure...');
@@ -156,16 +148,19 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         normalized.add(section.type.toLowerCase());
       }
     }
+    const mainSections = structure.sections.filter(s => !['terms', 'privacy', 'responsible-gaming'].includes(s.type));
+    const legalSections = structure.sections.filter(s => ['terms', 'privacy', 'responsible-gaming'].includes(s.type));
+
     let totalInputTokens = structureResult.usage?.inputTokens ?? 0;
     let totalOutputTokens = structureResult.usage?.outputTokens ?? 0;
 
-    console.log(`Step 2.2: Generating ${structure.sections.length} sections sequentially to avoid rate limits...`);
+    console.log(`Step 2.2: Generating ${mainSections.length} sections sequentially to avoid rate limits...`);
     const themeToUse = structure.theme || { primaryColor: "indigo-500", font: "Inter" };
     const usedImagePaths = new Set<string>();
     const sectionResults = [];
 
     // Generate sections sequentially to avoid hitting rate limits.
-    for (const section of structure.sections) {
+    for (const section of mainSections) {
       let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
       if (randomImageUrl) {
         usedImagePaths.add(randomImageUrl);
@@ -233,7 +228,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       }
     }
 
-    console.log('Generation successful!');
+    const elapsedMs = Date.now() - startedAt;
+    console.log(`Generation successful! Main sections: ${mainSections.length}, legal sections: ${legalSections.length}, elapsed ${Math.round(elapsedMs / 100) / 10}s`);
     const usage: TokenUsageSummary = {
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,

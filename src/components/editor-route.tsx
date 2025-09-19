@@ -13,6 +13,25 @@ export function EditorRoute({ siteId }: { siteId: string }) {
   const router = useRouter();
 
   useEffect(() => {
+    if (site) return;
+    if (typeof window === 'undefined') return;
+    try {
+      const cacheKey = `wg-cache-${siteId}`;
+      const cached = window.sessionStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && typeof parsed === 'object' && parsed.files) {
+          setSite(parsed as Site);
+          setLoading(false);
+        }
+        window.sessionStorage.removeItem(cacheKey);
+      }
+    } catch (cacheErr) {
+      console.warn('Failed to hydrate editor cache:', cacheErr);
+    }
+  }, [siteId, site]);
+
+  useEffect(() => {
     (async () => {
       try {
         const sb = await getSupabase();
