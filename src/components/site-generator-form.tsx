@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Sparkles, Wand2, Check } from 'lucide-react';
+import { Loader2, Wand2, Check, Sparkles } from 'lucide-react';
 import { enhancePromptAction } from '@/app/actions';
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 
 function SubmitButton({ isPending, isAuthed, onRequireAuth }: { isPending: boolean; isAuthed: boolean; onRequireAuth?: () => void }) {
   return (
@@ -90,10 +91,15 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
       <Card className="w-full shadow-2xl backdrop-blur-lg bg-black/40 border border-white/10">
         <CardHeader className="text-center">
           <div className="flex justify-center items-center gap-2 mb-2">
-            <Sparkles className="h-8 w-8 text-primary" />
-            <CardTitle className="font-headline text-4xl tracking-tight">
-              WebGenius
-            </CardTitle>
+            <Image
+              src="/favicon.ico"
+              alt="WebGenius"
+              width={44}
+              height={44}
+              className="rounded-xl shadow-[0_12px_28px_rgba(120,90,255,0.35)]"
+              priority
+            />
+            <CardTitle className="sr-only">WebGenius</CardTitle>
           </div>
           <CardDescription className="font-body text-lg">
             Generate a unique, responsive website from a single prompt.
