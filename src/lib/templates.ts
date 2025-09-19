@@ -44,14 +44,20 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // --- Smooth Scroll for Anchor Links ---
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+    document.querySelectorAll('a[href]').forEach(anchor => {
+        const href = anchor.getAttribute('href') || '';
+        const isHashLink = href.startsWith('#') || href.startsWith('/#') || href.startsWith('./#');
+        if (!isHashLink) return;
         anchor.addEventListener('click', function (e) {
-            if (this.pathname === window.location.pathname) {
-                e.preventDefault();
-                const targetElement = document.querySelector(this.getAttribute('href'));
-                if (targetElement) {
-                    targetElement.scrollIntoView({ behavior: 'smooth' });
-                }
+            const raw = this.getAttribute('href') || '';
+            if (!raw) return;
+            e.preventDefault();
+            const selector = raw.replace(/^([./]+)/, '');
+            const targetElement =
+                document.getElementById(selector.replace('#', '')) ||
+                document.querySelector(selector.startsWith('#') ? selector : '#' + selector);
+            if (targetElement) {
+                targetElement.scrollIntoView({ behavior: 'smooth' });
             }
         });
     });

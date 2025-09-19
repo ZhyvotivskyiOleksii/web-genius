@@ -11,6 +11,55 @@ import { generateSiteStructure, SiteStructure } from '@/ai/flows/generate-site-s
 import { generateHtmlForSection } from '@/ai/flows/generate-html-for-section';
 import { getIndexHtmlTemplate, getGamePageTemplate, getLegalPageTemplate, stylesCssTemplate } from '@/lib/templates';
 
+const EXTERNAL_OR_DATA_URL = /^(?:https?:)?\/\//i;
+const DEFAULT_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&w=1280&q=80';
+
+function patchSectionImages(html: string, fallbackUrl?: string) {
+  if (!html) return html;
+  let output = html;
+
+  const replacement = fallbackUrl || DEFAULT_IMAGE_FALLBACK;
+
+  if (replacement) {
+    output = output.replace(
+      /background(?:-image)?\s*:\s*url\((['"]?)(?!https?:|data:|\/\/)([^'"\)]+)\1\)/gi,
+      (_match) => `background-image:url('${replacement}')`
+    );
+  }
+
+  output = output.replace(/<img\b([^>]*?)src=["'](.*?)["']([^>]*?)>/gi, (match, pre, src, post) => {
+    const trimmed = (src || '').trim();
+    const shouldReplace = !trimmed || trimmed === '#' || (!EXTERNAL_OR_DATA_URL.test(trimmed) && !trimmed.startsWith('data:'));
+    if (!shouldReplace && !replacement) return match;
+    const finalSrc = shouldReplace ? replacement : trimmed;
+    if (!finalSrc) return match;
+
+    let tag = `<img${pre}src="${finalSrc}"${post}`;
+    if (!/loading\s*=/.test(pre + post)) {
+      tag = tag.replace(/>$/, ' loading="lazy">');
+    }
+    if (!/alt\s*=/.test(pre + post)) {
+      tag = tag.replace(/>$/, ' alt="Illustration">');
+    }
+    if (/class\s*=/.test(pre + post)) {
+      tag = tag.replace(/class=("|')([^"']*)(\1)/, (_m, quote, cls) => `class=${quote}${cls} object-cover${quote}`);
+    } else {
+      tag = tag.replace(/>$/, ' class="object-cover">');
+    }
+    if (/style\s*=/.test(pre + post)) {
+      tag = tag.replace(/style=("|')([^"']*)(\1)/, (_m, quote, style) => {
+        const addition = 'object-fit:cover;width:100%;height:100%;';
+        return style.includes('object-fit') ? `style=${quote}${style}${quote}` : `style=${quote}${style}${style.endsWith(';') ? '' : ';'}${addition}${quote}`;
+      });
+    } else {
+      tag = tag.replace(/>$/, ' style="object-fit:cover;width:100%;height:100%;">');
+    }
+    return tag;
+  });
+
+  return output;
+}
+
 type FlowResult<T> = T & {
   usage?: { inputTokens?: number; outputTokens?: number };
   model?: string;
@@ -87,17 +136,18 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
 
     console.log(`Step 2.2: Generating ${mainSections.length} main sections in parallel...`);
     const usedImagePaths = new Set<string>();
-    const mainSectionPromises = mainSections.map(section => {
-      let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
-      if (randomImageUrl) usedImagePaths.add(randomImageUrl);
-      return generateHtmlForSection({ section, theme: structure.theme, imageUrl: randomImageUrl });
-    });
-    const mainSectionResults = await Promise.all(mainSectionPromises);
-    mainSectionResults.forEach(res => {
-        if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
-        if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
-    });
-    const allSectionsHtml = mainSectionResults.map(result => result.htmlContent).join('\n\n');
+    const mainSectionResults = await Promise.all(
+      mainSections.map(async (section) => {
+        let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
+        if (randomImageUrl) usedImagePaths.add(randomImageUrl);
+        const result = await generateHtmlForSection({ section, theme: structure.theme, imageUrl: randomImageUrl });
+        if (result.usage?.inputTokens) totalInputTokens += result.usage.inputTokens;
+        if (result.usage?.outputTokens) totalOutputTokens += result.usage.outputTokens;
+        const patchedHtml = patchSectionImages(result.htmlContent, randomImageUrl);
+        return { html: patchedHtml, model: result.model };
+      })
+    );
+    const allSectionsHtml = mainSectionResults.map(r => r.html).join('\n\n');
 
     // --- Етап 3: Збірка фінального об'єкта `files` ---
     console.log('Step 3: Assembling final files object...');
@@ -164,7 +214,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
       totalTokens: totalInputTokens + totalOutputTokens,
-      model: structureResult.model || mainSectionResults[0]?.model,
+      model: structureResult.model || mainSectionResults.find(r => r.model)?.model,
     };
 
     return { domain, files, history: [...history, prompt], types: websiteTypes, usage };
