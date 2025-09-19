@@ -154,25 +154,28 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     let totalInputTokens = structureResult.usage?.inputTokens ?? 0;
     let totalOutputTokens = structureResult.usage?.outputTokens ?? 0;
 
-    console.log(`Step 2.2: Generating ${mainSections.length} sections sequentially to avoid rate limits...`);
+    console.log(`Step 2.2: Generating ${mainSections.length} sections with limited concurrency...`);
     const themeToUse = structure.theme || { primaryColor: "indigo-500", font: "Inter" };
     const usedImagePaths = new Set<string>();
-    const sectionResults = [];
+    const sectionResults: { html: string; model?: string }[] = [];
+    const CHUNK_SIZE = 3;
 
-    // Generate sections sequentially to avoid hitting rate limits.
-    for (const section of mainSections) {
-      let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
-      if (randomImageUrl) {
-        usedImagePaths.add(randomImageUrl);
-      }
-      const res = await generateHtmlForSection({ section, theme: themeToUse, imageUrl: randomImageUrl });
-      sectionResults.push(res);
-      if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
-      if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
+    for (let i = 0; i < mainSections.length; i += CHUNK_SIZE) {
+      const slice = mainSections.slice(i, i + CHUNK_SIZE);
+      const generated = await Promise.all(slice.map(async (section) => {
+        let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
+        if (randomImageUrl) {
+          usedImagePaths.add(randomImageUrl);
+        }
+        const res = await generateHtmlForSection({ section, theme: themeToUse, imageUrl: randomImageUrl });
+        if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
+        if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
+        return { html: res.htmlContent, model: res.model };
+      }));
+      sectionResults.push(...generated);
     }
 
-    // Join the HTML content, now guaranteed to be in the correct order
-    const allSectionsHtml = sectionResults.map(result => result.htmlContent).join('\n\n');
+    const allSectionsHtml = sectionResults.map(result => result.html).join('\n\n');
 
     const policyLanguage = isGameSite ? 'English' : 'Ukrainian';
     console.log(`Step 2.3: Generating unique privacy policy in ${policyLanguage}...`);
