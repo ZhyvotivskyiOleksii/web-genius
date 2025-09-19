@@ -232,7 +232,7 @@ export default function Home() {
   }, [fetchProjects, userId]);
 
   const featuredProject = useMemo(() => (projects.length > 0 ? projects[0] : null), [projects]);
-  const otherProjects = useMemo(() => (projects.length > 1 ? projects.slice(1, 6) : []), [projects]);
+  const otherProjects = useMemo(() => (projects.length > 1 ? projects.slice(1, 3) : []), [projects]);
   const projectsEmpty = useMemo(() => !projectsLoading && projects.length === 0, [projectsLoading, projects]);
   const featuredLiveUrl = useMemo(() => extractLiveUrl(featuredProject?.meta), [featuredProject]);
   const featuredStatus = useMemo(() => statusStyles(featuredProject?.status), [featuredProject]);

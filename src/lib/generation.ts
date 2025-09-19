@@ -11,6 +11,26 @@ import { generateHtmlForSection } from '@/ai/flows/generate-html-for-section';
 import { getIndexHtmlTemplate, getGamePageTemplate, getPrivacyPolicyTemplate, mainJsTemplate, stylesCssTemplate } from '@/lib/templates';
 import manifest from '@/lib/asset-manifest.json';
 
+// Helper to grab all files within a directory (used for game bundles)
+async function getFilesRecursively(dir: string): Promise<Record<string, Buffer>> {
+  const fileList: Record<string, Buffer> = {};
+  const readDir = async (currentDir: string, relativeDir: string) => {
+    const files = await fs.promises.readdir(currentDir);
+    for (const file of files) {
+      const filePath = path.join(currentDir, file);
+      const fileStat = await fs.promises.stat(filePath);
+      const relativeFilePath = path.join(relativeDir, file);
+      if (fileStat.isDirectory()) {
+        await readDir(filePath, relativeFilePath);
+      } else {
+        fileList[relativeFilePath] = await fs.promises.readFile(filePath);
+      }
+    }
+  };
+  await readDir(dir, '');
+  return fileList;
+}
+
 // Type definitions (unchanged)
 type FlowResult<T> = T & {
   usage?: { inputTokens?: number; outputTokens?: number };
@@ -91,12 +111,21 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
   try {
     const startedAt = Date.now();
     const isGameSite = websiteTypes.includes('Game');
+    const publicDir = path.join(process.cwd(), 'public');
+    const sourceGamesDir = path.join(publicDir, 'games');
 
     // --- Step 1: Read Libraries (Images and Games) via manifest ---
     const imagePaths = Array.isArray(assets.images) ? assets.images : [];
     const manifestGames = Array.isArray(assets.games) ? assets.games : [];
-    const gameFolders = manifestGames.filter(Boolean);
-    console.log(`Using manifest: found ${imagePaths.length} images and ${gameFolders.length} games.`);
+    const gameFolders = manifestGames.filter((folder) => {
+      if (!folder) return false;
+      try {
+        return fs.existsSync(path.join(sourceGamesDir, folder));
+      } catch {
+        return false;
+      }
+    });
+    console.log(`Using manifest: found ${imagePaths.length} images and ${gameFolders.length} games (available on disk).`);
 
     // --- Step 2: AI Content Generation ---
     console.log('Step 2.1: Getting site structure...');
@@ -200,11 +229,11 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     // Add used images
     console.log(`Adding ${usedImagePaths.size} used images to the files object...`);
     for (const webPath of usedImagePaths) {
-      const localPath = path.join(process.cwd(), 'public', webPath);
+      const localPath = path.join(publicDir, webPath);
       try {
-        files[webPath] = fs.readFileSync(localPath);
+        files[webPath] = await fs.promises.readFile(localPath);
       } catch (error) {
-        console.warn(`Could not read image file at ${localPath}`);
+        console.warn(`Could not read image file at ${localPath}`, error);
       }
     }
 
