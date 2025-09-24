@@ -196,13 +196,23 @@ function extractRequestedSectionCount(input: string): number | null {
   return null;
 }
 
+function resolveLanguage(prompt: string, websiteTypes: string[]): { name: string; iso: string } {
+  if (websiteTypes?.includes('Sport bar Poland')) {
+    return { name: 'Polish', iso: 'pl' };
+  }
+  if (websiteTypes?.includes('Game')) {
+    return { name: 'English', iso: 'en' };
+  }
+  return detectLanguage(prompt);
+}
+
 export async function generateSingleSite(prompt: string, siteName: string, websiteTypes: string[] = [], history: string[] = []): Promise<Site | null> {
   try {
     const startedAt = Date.now();
     const isGameSite = websiteTypes.includes('Game');
     const publicDir = path.join(process.cwd(), 'public');
     const sourceGamesDir = path.join(publicDir, 'games');
-    const { name: languageName } = detectLanguage(prompt);
+    const { name: languageName } = resolveLanguage(prompt, websiteTypes);
 
     // --- Step 1: Read Libraries (Images and Games) via manifest ---
     const imagePaths = Array.isArray(assets.images) ? assets.images : [];
@@ -299,6 +309,18 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       if (gamePageContentResult.usage?.outputTokens) totalOutputTokens += gamePageContentResult.usage.outputTokens;
 
       files['game.html'] = getGamePageTemplate(title, gamePageContentResult.title, gameIframePath, gamePageContentResult.disclaimerHtml);
+
+      // Bundle the selected game's assets into the export so the iframe works offline.
+      try {
+        const gameAssets = await getFilesRecursively(path.join(sourceGamesDir, randomGameFolder));
+        for (const [relative, buffer] of Object.entries(gameAssets)) {
+          const normalizedRelative = relative.split(path.sep).join('/');
+          const zipPath = ['games', randomGameFolder, normalizedRelative].join('/');
+          files[zipPath] = buffer;
+        }
+      } catch (error) {
+        console.warn(`Failed to attach game assets for ${randomGameFolder}:`, error);
+      }
     }
 
     // Add standard files
