@@ -11,6 +11,95 @@ import { generateHtmlForSection } from '@/ai/flows/generate-html-for-section';
 import { getIndexHtmlTemplate, getGamePageTemplate, getPrivacyPolicyTemplate, mainJsTemplate, stylesCssTemplate } from '@/lib/templates';
 import manifest from '@/lib/asset-manifest.json';
 
+function detectLanguage(prompt: string): { name: string; iso: string } {
+  const text = (prompt || '').toLowerCase();
+
+  const explicitChecks: Array<{ name: string; iso: string; regex: RegExp[] }> = [
+    {
+      name: 'Polish',
+      iso: 'pl',
+      regex: [
+        /\bpo\s+polsku\b/,
+        /\bпо\s+польськ(?:ій|ою)\b/,
+        /\bна\s+польск(?:ом|ом языке)\b/,
+        /\bin\s+polish\b/,
+        /\bwebsite\s+(should|must)\s+be\s+in\s+polish\b/,
+        /\bstrona\s+powinna\s+być\s+po\s+polsku\b/,
+      ],
+    },
+    {
+      name: 'Ukrainian',
+      iso: 'uk',
+      regex: [
+        /\bукраїнськ(?:ою|ій)\b/,
+        /\bна\s+українській\b/,
+        /\bin\s+ukrainian\b/,
+      ],
+    },
+    {
+      name: 'English',
+      iso: 'en',
+      regex: [
+        /\bв\s+английском\b/,
+        /\bна\s+англійській\b/,
+        /\bin\s+english\b/,
+      ],
+    },
+  ];
+
+  for (const lang of explicitChecks) {
+    if (lang.regex.some((rx) => rx.test(text))) {
+      return { name: lang.name, iso: lang.iso };
+    }
+  }
+
+  const polishRegex = /[ąćęłńóśźżĄĆĘŁŃÓŚŹŻ]/;
+  const cyrillicRegex = /[\u0400-\u04FF]/;
+  if (polishRegex.test(prompt)) {
+    return { name: 'Polish', iso: 'pl' };
+  }
+  if (cyrillicRegex.test(prompt)) {
+    return { name: 'Ukrainian', iso: 'uk' };
+  }
+  return { name: 'English', iso: 'en' };
+}
+
+function getLocalizedSectionTemplates(language: string, siteName: string) {
+  const templates: Record<string, { type: string; title: string; details?: string }[]> = {
+    English: [
+      { type: 'hero', title: `Experience ${siteName}` },
+      { type: 'about', title: 'About Us' },
+      { type: 'features', title: 'Highlights & Features' },
+      { type: 'stats', title: 'Key Stats & Milestones' },
+      { type: 'parallax', title: 'Immersive Moments' },
+      { type: 'faq', title: 'Frequently Asked Questions' },
+      { type: 'responsible', title: 'Responsible Entertainment' },
+      { type: 'cta', title: 'Try the Demo Experience' },
+    ],
+    Polish: [
+      { type: 'hero', title: `Poznaj ${siteName}` },
+      { type: 'about', title: 'O nas' },
+      { type: 'features', title: 'Najważniejsze atuty' },
+      { type: 'stats', title: 'Statystyki i sukcesy' },
+      { type: 'parallax', title: 'Sportowe emocje' },
+      { type: 'faq', title: 'Najczęstsze pytania' },
+      { type: 'responsible', title: 'Odpowiedzialna rozrywka' },
+      { type: 'cta', title: 'Wypróbuj demo' },
+    ],
+    Ukrainian: [
+      { type: 'hero', title: `Відкрийте ${siteName}` },
+      { type: 'about', title: 'Про нас' },
+      { type: 'features', title: 'Наші переваги' },
+      { type: 'stats', title: 'Статистика та досягнення' },
+      { type: 'parallax', title: 'Яскраві моменти' },
+      { type: 'faq', title: 'Поширені запитання' },
+      { type: 'responsible', title: 'Відповідальна гра' },
+      { type: 'cta', title: 'Спробуйте демо' },
+    ],
+  };
+  return templates[language] || templates.English;
+}
+
 // Helper to grab all files within a directory (used for game bundles)
 async function getFilesRecursively(dir: string): Promise<Record<string, Buffer>> {
   const fileList: Record<string, Buffer> = {};
@@ -113,6 +202,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const isGameSite = websiteTypes.includes('Game');
     const publicDir = path.join(process.cwd(), 'public');
     const sourceGamesDir = path.join(publicDir, 'games');
+    const { name: languageName } = detectLanguage(prompt);
 
     // --- Step 1: Read Libraries (Images and Games) via manifest ---
     const imagePaths = Array.isArray(assets.images) ? assets.images : [];
@@ -129,21 +219,12 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
 
     // --- Step 2: AI Content Generation ---
     console.log('Step 2.1: Getting site structure...');
-    const structureResult: FlowResult<SiteStructure> = await generateSiteStructure({ prompt });
+    const structureResult: FlowResult<SiteStructure> = await generateSiteStructure({ prompt, language: languageName });
     const structure = structureResult;
     if (!structure || !structure.sections || structure.sections.length === 0) {
       throw new Error('The AI architect failed to create a site plan.');
     }
-    const desiredSections: { type: string; title: string; details?: string }[] = [
-      { type: 'hero', title: `Experience ${siteName}` },
-      { type: 'about', title: 'About Our Social Casino' },
-      { type: 'features', title: 'Highlights & Features' },
-      { type: 'stats', title: 'Player Stats & Milestones' },
-      { type: 'parallax', title: 'Immersive Moments' },
-      { type: 'faq', title: 'Frequently Asked Questions' },
-      { type: 'responsible', title: 'Responsible Gaming' },
-      { type: 'cta', title: 'Try the Demo Slots' },
-    ];
+    const desiredSections = getLocalizedSectionTemplates(languageName, siteName);
     const explicitSectionCount = extractRequestedSectionCount(prompt);
     if (explicitSectionCount != null && structure.sections.length > explicitSectionCount) {
       structure.sections = structure.sections.slice(0, explicitSectionCount);
@@ -176,7 +257,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         if (randomImageUrl) {
           usedImagePaths.add(randomImageUrl);
         }
-        const res = await generateHtmlForSection({ section, theme: themeToUse, imageUrl: randomImageUrl });
+        const res = await generateHtmlForSection({ section, theme: themeToUse, imageUrl: randomImageUrl, language: languageName });
         if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
         if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
         return { html: res.htmlContent, model: res.model };
@@ -186,7 +267,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
 
     const allSectionsHtml = sectionResults.map(result => result.html).join('\n\n');
 
-    const policyLanguage = isGameSite ? 'English' : 'Ukrainian';
+    const policyLanguage = languageName;
     console.log(`Step 2.3: Generating unique privacy policy in ${policyLanguage}...`);
     const policyResult: FlowResult<PolicyContent> = await generatePolicyContent({ siteName, siteDescription: prompt, language: policyLanguage });
     if (policyResult.usage?.inputTokens) totalInputTokens += policyResult.usage.inputTokens;
@@ -213,7 +294,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         ? `${absoluteHost.replace(/\/$/, '')}/games/${randomGameFolder}/game.html`
         : `games/${randomGameFolder}/game.html`;
 
-      const gamePageContentResult: FlowResult<GamePageContent> = await generateGamePageContent({ siteName: title });
+      const gamePageContentResult: FlowResult<GamePageContent> = await generateGamePageContent({ siteName: title, language: languageName });
       if (gamePageContentResult.usage?.inputTokens) totalInputTokens += gamePageContentResult.usage.inputTokens;
       if (gamePageContentResult.usage?.outputTokens) totalOutputTokens += gamePageContentResult.usage.outputTokens;
 

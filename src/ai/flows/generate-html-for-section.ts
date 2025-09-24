@@ -15,6 +15,7 @@ const SectionHtmlInputSchema = z.object({
     primaryColor: z.string(),
   }),
   imageUrl: z.string().optional().describe("URL випадкового зображення, яке потрібно вставити"),
+  language: z.string().optional(),
 });
 
 const UsageSchema = z.object({
@@ -45,6 +46,7 @@ const sectionPrompt = ai.definePrompt({
 - Используй акцентный цвет: \`{{theme.primaryColor}}\`.
 - **ВАЖНО: Главному тегу <section> ОБЯЗАТЕЛЬНО добавь id, равный типу секции. Пример: \`<section id="{{section.type}}">\`.**
 - **Если тип секции 'hero', сделай её полноэкранной, добавив классы \`min-h-screen flex flex-col justify-center\`**.
+- **Пиши весь текст секции строго на языке {{#if language}}{{language}}{{else}}пользовательского запроса{{/if}} (заголовки, кнопки, описи).**
 
 {{#if imageUrl}}
 **ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЙ ЭТО ИЗОБРАЖЕНИЕ:** \`{{imageUrl}}\`. Вставь его в тег \`<img src="{{imageUrl}}">\`. Придумай осмысленный alt-текст, що описує типове зображення для казино (наприклад, "Яскравий ігровий автомат у казино").

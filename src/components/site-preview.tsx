@@ -5,6 +5,7 @@ import type { Site } from '@/lib/generation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Badge } from '@/components/ui/badge';
 import { Globe } from 'lucide-react';
 
 import {
@@ -19,6 +20,7 @@ import {
   Circle,
   Settings as SettingsIcon,
   ExternalLink,
+  ChevronLeft,
   ChevronRight,
   ChevronDown,
   Sparkles,
@@ -39,6 +41,10 @@ import {
   X,
   Package,
   MousePointerSquareDashed as MousePointerSquare,
+  Search,
+  Rocket,
+  EyeOff,
+  Wrench,
   Trash2,
 } from 'lucide-react';
 import {
@@ -67,9 +73,26 @@ import { publishToCpanelAction } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import debounce from 'lodash/debounce';
 import { emmetHTML, emmetCSS, emmetJSX } from 'emmet-monaco-es';
@@ -117,6 +140,66 @@ const getChatCacheKey = (siteId: string | null, slug: string) => {
   const safeSlug = slug && slug.length ? slug : 'untitled';
   const base = siteId ? `site:${siteId}` : `draft:${safeSlug}`;
   return `${CHAT_CACHE_PREFIX}${base}`;
+};
+
+type ProjectRecord = {
+  id: string;
+  name: string;
+  slug: string;
+  updated_at: string;
+  status?: string | null;
+  meta?: Record<string, any> | null;
+};
+
+type DeployedRecord = {
+  id: string;
+  domain: string;
+  url?: string | null;
+  created_at: string;
+  status?: string | null;
+};
+
+type ProjectStatusKey = 'all' | 'work' | 'deploy' | 'cloaking';
+
+const PROJECT_STATUS_PRESETS: { key: ProjectStatusKey; label: string; matches: string[] | null }[] = [
+  { key: 'all', label: 'Все', matches: null },
+  { key: 'work', label: 'В работе', matches: ['draft', 'work', 'in_progress', 'pending', 'edit'] },
+  { key: 'deploy', label: 'Деплой', matches: ['deploy', 'published', 'live', 'production'] },
+  { key: 'cloaking', label: 'Клоакинг', matches: ['cloak', 'cloaking', 'stealth'] },
+];
+
+const PROJECT_STATUS_STYLES: Record<ProjectStatusKey, { label: string; badgeClass: string; icon: JSX.Element }> = {
+  all: {
+    label: 'Все',
+    badgeClass: 'border-white/10 bg-white/5 text-slate-100',
+    icon: <Rocket className="h-3.5 w-3.5" />,
+  },
+  work: {
+    label: 'В работе',
+    badgeClass: 'border-sky-500/30 bg-sky-500/15 text-sky-200',
+    icon: <Wrench className="h-3.5 w-3.5" />,
+  },
+  deploy: {
+    label: 'Деплой',
+    badgeClass: 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200',
+    icon: <Rocket className="h-3.5 w-3.5" />,
+  },
+  cloaking: {
+    label: 'Клоакинг',
+    badgeClass: 'border-purple-500/30 bg-purple-500/15 text-purple-200',
+    icon: <EyeOff className="h-3.5 w-3.5" />,
+  },
+};
+
+const PROJECTS_PAGE_SIZE = 10;
+
+const deriveProjectStatus = (row: ProjectRecord): ProjectStatusKey => {
+  const status = (row.status || '').toLowerCase();
+  const metaMode = typeof row.meta?.mode === 'string' ? row.meta.mode.toLowerCase() : '';
+  if ([status, metaMode].some((value) => value.includes('cloak'))) return 'cloaking';
+  if ([status, metaMode].some((value) => value.includes('deploy') || value.includes('publish') || value.includes('live'))) return 'deploy';
+  if ([status, metaMode].some((value) => value.includes('draft') || value.includes('work') || value.includes('pending'))) return 'work';
+  return 'work';
 };
 
 const normalizeCachedMessage = (entry: any): ChatMessage | null => {
@@ -307,10 +390,17 @@ export function SitePreview({
   const [wholeSiteScope, setWholeSiteScope] = useState(true);
   const [pendingBulkOriginal, setPendingBulkOriginal] = useState<Record<string,string> | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [isMySitesOpen, setIsMySitesOpen] = useState(false);
-  const [deployedSites, setDeployedSites] = useState<any[]>([]);
+  const [deployedSites, setDeployedSites] = useState<DeployedRecord[]>([]);
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
-  const [myProjects, setMyProjects] = useState<any[]>([]);
+  const [myProjects, setMyProjects] = useState<ProjectRecord[]>([]);
+  const [projectsSearch, setProjectsSearch] = useState('');
+  const [projectsPreset, setProjectsPreset] = useState<ProjectStatusKey>('all');
+  const [projectsSort, setProjectsSort] = useState<'recent' | 'name' | 'status'>('recent');
+  const [projectsPage, setProjectsPage] = useState(1);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [projectsDeleteTarget, setProjectsDeleteTarget] = useState<ProjectRecord | null>(null);
+  const [projectsDeletePending, setProjectsDeletePending] = useState(false);
   
 
   const suggestedTld = useMemo(() => {
@@ -458,33 +548,157 @@ export function SitePreview({
 
   // Load deployed sites when modal is opened
   useEffect(() => {
-    if (isMySitesOpen && userId) {
-      (async () => {
-        const result = await loadDeployedSitesAction(userId);
-        if (result.success) {
-          setDeployedSites(result.sites || []);
-        } else {
-          toast({ variant: 'destructive', title: 'Error', description: 'Could not load your deployed sites.' });
-        }
-      })();
-    }
-  }, [isMySitesOpen, userId, toast]);
-
-  // Load My Projects when dialog opens
-  useEffect(() => {
     if (!isProjectsOpen || !userId) return;
+    let cancelled = false;
     (async () => {
-      const sb = await getSupabase();
-      if (!sb) return;
-      const { data, error } = await sb
-        .from('sites')
-        .select('id,name,slug,updated_at,meta')
-        .eq('user_id', userId)
-        .order('updated_at', { ascending: false });
-      if (!error) setMyProjects(data || []);
-      else toast({ variant: 'destructive', title: 'Error', description: 'Failed to load projects' });
+      setProjectsLoading(true);
+      setProjectsError(null);
+      try {
+        const sb = await getSupabase();
+        if (!sb) throw new Error('Supabase not configured');
+        const [projectsRes, deployRes] = await Promise.all([
+          sb
+            .from('sites')
+            .select('id,name,slug,updated_at,status,meta')
+            .eq('user_id', userId)
+            .order('updated_at', { ascending: false }),
+          loadDeployedSitesAction(userId),
+        ]);
+        if (cancelled) return;
+        if (projectsRes.error) throw projectsRes.error;
+        const rows = (projectsRes.data || []).map((row: any) => ({
+          ...row,
+          meta: row.meta || null,
+        })) as ProjectRecord[];
+        setMyProjects(rows);
+        if (deployRes.success) {
+          setDeployedSites((deployRes.sites || []) as DeployedRecord[]);
+        } else if (deployRes.error) {
+          setProjectsError((prev) => prev ?? (deployRes.error as string));
+        }
+      } catch (e: any) {
+        if (cancelled) return;
+        const message = e?.message || 'Не удалось загрузить проекты';
+        setProjectsError(message);
+        toast({ variant: 'destructive', title: 'Ошибка', description: message });
+      } finally {
+        if (!cancelled) setProjectsLoading(false);
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [isProjectsOpen, userId, toast]);
+
+  useEffect(() => {
+    setProjectsPage(1);
+  }, [projectsSearch, projectsPreset, projectsSort]);
+
+  const sortedProjects = useMemo(() => {
+    if (!myProjects.length) return [];
+    const clone = [...myProjects];
+    switch (projectsSort) {
+      case 'name':
+        return clone.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+      case 'status':
+        return clone.sort((a, b) => deriveProjectStatus(a).localeCompare(deriveProjectStatus(b)));
+      case 'recent':
+      default:
+        return clone.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+    }
+  }, [myProjects, projectsSort]);
+
+  const filteredProjects = useMemo(() => {
+    const query = projectsSearch.trim().toLowerCase();
+    return sortedProjects.filter((project) => {
+      const presetMeta = PROJECT_STATUS_PRESETS.find((preset) => preset.key === projectsPreset);
+      const matchesPreset = !presetMeta || !presetMeta.matches
+        ? true
+        : presetMeta.matches.some((value) => {
+            const status = (project.status || '').toLowerCase();
+            const metaMode = typeof project.meta?.mode === 'string' ? project.meta.mode.toLowerCase() : '';
+            const derived = deriveProjectStatus(project);
+            return status.includes(value) || metaMode.includes(value) || derived === presetMeta.key;
+          });
+      if (!matchesPreset) return false;
+      if (!query) return true;
+      const domain = project.meta?.domain ? String(project.meta.domain).toLowerCase() : '';
+      return (
+        project.name.toLowerCase().includes(query) ||
+        project.slug.toLowerCase().includes(query) ||
+        domain.includes(query)
+      );
+    });
+  }, [sortedProjects, projectsPreset, projectsSearch]);
+
+  const projectsTotalPages = Math.max(1, Math.ceil(filteredProjects.length / PROJECTS_PAGE_SIZE));
+  const projectsCurrentPage = Math.min(projectsPage, projectsTotalPages);
+  const paginatedProjects = filteredProjects.slice((projectsCurrentPage - 1) * PROJECTS_PAGE_SIZE, projectsCurrentPage * PROJECTS_PAGE_SIZE);
+
+  useEffect(() => {
+    if (projectsPage !== projectsCurrentPage) setProjectsPage(projectsCurrentPage);
+  }, [projectsCurrentPage, projectsPage]);
+
+  const renderProjectBadge = (project: ProjectRecord) => {
+    const descriptor = PROJECT_STATUS_STYLES[deriveProjectStatus(project)];
+    return (
+      <Badge className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium ${descriptor.badgeClass}`}>
+        {descriptor.icon}
+        <span>{descriptor.label}</span>
+      </Badge>
+    );
+  };
+
+  const handleProjectOpen = useCallback(async (project: ProjectRecord) => {
+    try {
+      const sb = await getSupabase();
+      if (!sb) throw new Error('Supabase не настроен');
+      const { data: files, error } = await sb
+        .from('site_files')
+        .select('path,content')
+        .eq('site_id', project.id);
+      if (error) throw error;
+      const map: Record<string, string> = {};
+      (files || []).forEach((file: any) => {
+        if (file?.path) map[file.path] = file.content || '';
+      });
+      setSite((prev) => ({
+        ...prev,
+        domain: project.slug || prev.domain,
+        files: { ...map },
+      }));
+      setSiteId(project.id);
+      setIsProjectsOpen(false);
+      toast({ title: 'Проект открыт', description: `Загружен «${project.name}».` });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Не удалось открыть', description: e?.message || 'Ошибка загрузки проекта.' });
+    }
+  }, [toast, setSite, setSiteId, setIsProjectsOpen]);
+
+  const handleProjectDelete = useCallback(async () => {
+    if (!projectsDeleteTarget) return;
+    try {
+      setProjectsDeletePending(true);
+      const sb = await getSupabase();
+      if (!sb) throw new Error('Supabase не настроен');
+      const { data: auth } = await sb.auth.getUser();
+      if (!auth.user?.id) throw new Error('Авторизация истекла');
+      const id = projectsDeleteTarget.id;
+      await sb.from('site_files').delete().eq('site_id', id);
+      const { error } = await sb.from('sites').delete().eq('id', id).eq('user_id', auth.user.id);
+      if (error) throw error;
+      setMyProjects((prev) => prev.filter((project) => project.id !== id));
+      if (siteId === id) {
+        setSiteId(null);
+      }
+      toast({ title: 'Проект удалён', description: `«${projectsDeleteTarget.name}» отправлен в архив.` });
+    } catch (e: any) {
+      toast({ variant: 'destructive', title: 'Не получилось', description: e?.message || 'Удаление не удалось.' });
+    } finally {
+      setProjectsDeletePending(false);
+      setProjectsDeleteTarget(null);
+    }
+  }, [projectsDeleteTarget, toast, siteId, setSiteId]);
 
 
   // Auto-start убран — запуск только по кнопке Publish
@@ -2489,66 +2703,249 @@ export function SitePreview({
       </Dialog>
       
 
-      <Dialog open={isProjectsOpen} onOpenChange={setIsProjectsOpen}>
-        <DialogContent className="max-w-2xl rounded-2xl border border-white/10 bg-[#0f1011]/90 backdrop-blur-md">
-          <DialogHeader>
-            <DialogTitle>My Projects</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-[60vh] -mx-6">
-            <div className="px-6 space-y-3">
-              {myProjects.length > 0 ? myProjects.map(p => (
-                <div key={p.id} className="p-3 rounded-md border border-border flex items-center justify-between">
-                  <div>
-                    <button
-                      className="font-semibold text-primary hover:underline"
-                      onClick={async () => {
-                        const sb = await getSupabase();
-                        if (!sb) return;
-                        const { data: files, error } = await sb
-                          .from('site_files')
-                          .select('path,content')
-                          .eq('site_id', p.id);
-                        if (error) { toast({ variant: 'destructive', title: 'Error', description: 'Failed to load files' }); return; }
-                        const map: Record<string,string> = {};
-                        (files || []).forEach((f: any) => { map[f.path] = f.content; });
-                        setSite((prev) => ({ ...prev, domain: p.slug || prev.domain, files: { ...map } }));
-                        setSiteId(p.id);
-                        setIsProjectsOpen(false);
-                      }}
-                    >{p.name}</button>
-                    <p className="text-xs text-muted-foreground">Updated {new Date(p.updated_at).toLocaleString()}</p>
+      <Dialog
+        open={isProjectsOpen}
+        onOpenChange={(open) => {
+          setIsProjectsOpen(open);
+          if (!open) {
+            setProjectsSearch('');
+            setProjectsPreset('all');
+            setProjectsPage(1);
+            setProjectsError(null);
+            setProjectsDeleteTarget(null);
+            setProjectsDeletePending(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl border border-white/10 bg-[#05070f] text-slate-100">
+          <div className="space-y-6">
+            <DialogHeader className="space-y-1">
+              <DialogTitle className="text-2xl font-semibold text-white">Мои проекты</DialogTitle>
+              <p className="text-sm text-slate-400">Черновики, деплой и клоакинг — всё под рукой.</p>
+            </DialogHeader>
+
+            <div className="rounded-2xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-6">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="relative flex-1">
+                    <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+                    <Input
+                      placeholder="Поиск по названию или домену"
+                      value={projectsSearch}
+                      onChange={(event) => setProjectsSearch(event.target.value)}
+                      className="h-11 rounded-2xl border-white/10 bg-white/[0.04] pl-11 text-sm text-white placeholder:text-slate-500 focus-visible:border-sky-500/60 focus-visible:ring-sky-500/40"
+                    />
                   </div>
-                  <span className="text-xs text-[#9da5b4]">{p.slug}</span>
+                  <div className="w-full sm:w-auto">
+                    <Select value={projectsSort} onValueChange={(value) => setProjectsSort(value as typeof projectsSort)}>
+                      <SelectTrigger className="h-11 w-full rounded-2xl border-white/10 bg-white/[0.04] text-sm text-white sm:w-48">
+                        <SelectValue placeholder="Сортировка" />
+                      </SelectTrigger>
+                      <SelectContent className="border-white/10 bg-[#0f172a] text-slate-100">
+                        <SelectItem value="recent">По обновлению</SelectItem>
+                        <SelectItem value="name">По названию</SelectItem>
+                        <SelectItem value="status">По статусу</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-              )) : (
-                <p className="text-sm text-muted-foreground text-center py-10">No projects yet. Start by generating a site.</p>
-              )}
+                <Tabs value={projectsPreset} onValueChange={(value) => setProjectsPreset(value as ProjectStatusKey)}>
+                  <TabsList className="flex flex-wrap gap-2 rounded-xl border border-white/5 bg-white/5 p-2">
+                    {PROJECT_STATUS_PRESETS.map((preset) => (
+                      <TabsTrigger
+                        key={preset.key}
+                        value={preset.key}
+                        className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2 text-xs font-medium text-slate-200 transition data-[state=active]:border-sky-400/50 data-[state=active]:bg-sky-400/10 data-[state=active]:text-white sm:flex-none"
+                      >
+                        {PROJECT_STATUS_STYLES[preset.key].icon}
+                        <span>{PROJECT_STATUS_STYLES[preset.key].label}</span>
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
             </div>
-          </ScrollArea>
+
+            {projectsError ? (
+              <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">{projectsError}</div>
+            ) : null}
+
+            <ScrollArea className="h-[52vh] pr-2">
+              <div className="space-y-4 pb-4">
+                {projectsLoading ? (
+                  <div className="flex justify-center py-12 text-slate-400">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                ) : paginatedProjects.length === 0 ? (
+                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-sm text-slate-400">
+                    Пока нет проектов в этой вкладке.
+                  </div>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {paginatedProjects.map((project) => (
+                      <div
+                        key={project.id}
+                        className="group relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-5 shadow-lg transition-transform duration-200 hover:-translate-y-1 hover:border-sky-400/50"
+                      >
+                        <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:[background:radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_55%)]" />
+                        <div className="relative flex flex-col gap-5">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="space-y-1.5">
+                              <button
+                                className="text-left text-base font-semibold text-white hover:text-sky-300"
+                                onClick={() => handleProjectOpen(project)}
+                              >
+                                {project.name}
+                              </button>
+                              <p className="text-[11px] uppercase tracking-[0.25em] text-slate-500">{project.slug}</p>
+                            </div>
+                            {renderProjectBadge(project)}
+                          </div>
+                          <div className="space-y-1 text-xs text-slate-400">
+                            <div className="flex items-center justify-between">
+                              <span>Обновлено</span>
+                              <span>{new Date(project.updated_at).toLocaleString()}</span>
+                            </div>
+                            {project.meta?.domain ? (
+                              <div className="flex items-center justify-between">
+                                <span>Домен</span>
+                                <span className="truncate text-slate-200">{String(project.meta.domain)}</span>
+                              </div>
+                            ) : null}
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                className="rounded-xl bg-sky-500/90 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-sky-400"
+                                onClick={() => handleProjectOpen(project)}
+                              >
+                                Открыть
+                              </Button>
+                              {project.meta?.domain ? (
+                                <Button
+                                  asChild
+                                  variant="ghost"
+                                  size="sm"
+                                  className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                                >
+                                  <a href={`https://${project.meta.domain}`} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="mr-1 h-4 w-4" /> В продакшн
+                                  </a>
+                                </Button>
+                              ) : null}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-rose-200 hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
+                              onClick={() => setProjectsDeleteTarget(project)}
+                            >
+                              <Trash2 className="mr-1 h-4 w-4" /> Удалить
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {!projectsLoading && paginatedProjects.length > 0 ? (
+                  <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[11px] text-slate-400 sm:flex-row">
+                    <div>
+                      Страница {projectsCurrentPage} из {projectsTotalPages} • {filteredProjects.length} проектов
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                        onClick={() => setProjectsPage((prev) => Math.max(1, prev - 1))}
+                        disabled={projectsCurrentPage === 1}
+                      >
+                        <ChevronLeft className="mr-1 h-4 w-4" />Назад
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                        onClick={() => setProjectsPage((prev) => Math.min(projectsTotalPages, prev + 1))}
+                        disabled={projectsCurrentPage === projectsTotalPages}
+                      >
+                        Далее<ChevronRight className="ml-1 h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+
+                {projectsPreset === 'deploy' && !projectsLoading ? (
+                  <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-200">Развернутые сайты</h3>
+                    {deployedSites.length === 0 ? (
+                      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-xs text-slate-400">
+                        Пока нет записей о деплое.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {deployedSites.map((deploy) => (
+                          <div
+                            key={deploy.id}
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-4 py-3 text-xs"
+                          >
+                            <div className="truncate">
+                              <a
+                                href={deploy.url || `https://${deploy.domain}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="font-medium text-sky-300 hover:text-sky-200"
+                              >
+                                {deploy.domain}
+                              </a>
+                              <p className="text-[11px] text-slate-400">{new Date(deploy.created_at).toLocaleString()}</p>
+                            </div>
+                            <Badge className={`px-2 py-1 text-[11px] font-medium ${deploy.status === 'succeeded' ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-200' : 'border-rose-500/40 bg-rose-500/15 text-rose-200'}`}>
+                              {deploy.status || 'pending'}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
-      <Dialog open={isMySitesOpen} onOpenChange={setIsMySitesOpen}>
-        <DialogContent className="max-w-2xl rounded-2xl border border-white/10 bg-[#0f1011]/90 backdrop-blur-md">
-          <DialogHeader>
-            <DialogTitle>My Deployed Sites</DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-[60vh] -mx-6">
-            <div className="px-6 space-y-3">
-              {deployedSites.length > 0 ? deployedSites.map(s => (
-                <div key={s.id} className="p-3 rounded-md border border-border flex items-center justify-between">
-                  <div>
-                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-primary hover:underline">{s.domain}</a>
-                    <p className="text-xs text-muted-foreground">Deployed on {new Date(s.created_at).toLocaleString()}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-full ${s.status === 'succeeded' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`}>{s.status}</span>
-                </div>
-              )) : (
-                <p className="text-sm text-muted-foreground text-center py-10">You haven't deployed any sites yet.</p>
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+      <AlertDialog
+        open={!!projectsDeleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setProjectsDeleteTarget(null);
+            setProjectsDeletePending(false);
+          }
+        }}
+      >
+        <AlertDialogContent className="border-white/10 bg-[#0b1120] text-slate-100">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить проект?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Это действие навсегда удалит «{projectsDeleteTarget?.name}» и связанные файлы.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={projectsDeletePending}>Отмена</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleProjectDelete}
+              disabled={projectsDeletePending}
+              className="bg-rose-500 text-white hover:bg-rose-600"
+            >
+              {projectsDeletePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Удалить
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Dialog open={!!diffView} onOpenChange={(v)=>{ if(!v) setDiffView(null); }}>
         <DialogContent className="max-w-5xl">
           <DialogHeader>
@@ -2589,21 +2986,6 @@ export function SitePreview({
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Open saved projects</TooltipContent>
-            </Tooltip>
-
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex items-center gap-2 rounded-full px-4 h-9 bg-[#24262c] text-slate-200 border border-white/5 hover:bg-[#2f3036] hover:text-white transition"
-                  onClick={() => setIsMySitesOpen(true)}
-                >
-                  <Globe className="h-4 w-4" />
-                  <span className="text-sm font-medium">My Sites</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Deployed sites</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>

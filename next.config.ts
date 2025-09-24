@@ -33,12 +33,12 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '500mb',
     },
-    outputFileTracingIncludes: {
-      'src/lib/generation.ts': [
-        './public/games/**',
-        './public/images/img-casino/**'
-      ],
-    },
+  },
+  outputFileTracingIncludes: {
+    'src/lib/generation.ts': [
+      './public/games/**',
+      './public/images/img-casino/**'
+    ],
   },
 };
 

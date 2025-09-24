@@ -36,6 +36,7 @@ export type SiteStructureFlowResult = z.infer<typeof SiteStructureFlowOutputSche
 
 const SiteStructureInputSchema = z.object({
   prompt: z.string(),
+  language: z.string().optional(),
 });
 
 // Промпт для нашего "архитектора"
@@ -44,6 +45,8 @@ const structurePrompt = ai.definePrompt({
   input: { schema: SiteStructureInputSchema },
   output: { schema: SiteStructureOutputSchema },
   prompt: `Ты — AI-архитектор веб-сайтов. Проанализируй запрос пользователя и создай план сайта в формате JSON. НЕ генерируй HTML. Твоя задача — только создать структуру. Если пользователь явно указал, сколько секций или блоков нужно сделать, соблюдай это число (например, «1 секция» значит только одну секцию). В остальных случаях предложи 3-5 самых подходящих секций.
+
+Обязательно используй язык {{#if language}}{{language}}{{else}}пользовательского запроса{{/if}} во всех заголовках и описаниях.
 
 Запрос пользователя: "{{prompt}}"`,
 });
