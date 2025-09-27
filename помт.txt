@@ -14,6 +14,8 @@ This is a social gaming platform intended for an adult audience (18+) for amusem
 Добавь всплывающее окно кукисов. 
  
 
+git fetch origin
+git reset --hard origin/main
 
 
 

@@ -34,6 +34,15 @@ const nextConfig: NextConfig = {
       bodySizeLimit: '500mb',
     },
   },
+  webpack(config, { isServer }) {
+    if (isServer) {
+      config.externals = Array.isArray(config.externals) ? config.externals : [];
+      if (!config.externals.includes('handlebars')) {
+        config.externals.push('handlebars');
+      }
+    }
+    return config;
+  },
   outputFileTracingIncludes: {
     'src/lib/generation.ts': [
       './public/games/**',

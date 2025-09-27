@@ -25,6 +25,15 @@ export type BrandingTheme = {
   styleBlock: string;
 };
 
+const randomChoice = <T>(items: T[], fallback?: T): T => {
+  if (!items || items.length === 0) {
+    if (fallback !== undefined) return fallback;
+    throw new Error('randomChoice called with empty array');
+  }
+  const index = Math.floor(Math.random() * items.length);
+  return items[index] ?? (fallback !== undefined ? fallback : items[0]);
+};
+
 export type BrandVisual = {
   primaryIcon: string;
   secondaryIcon?: string;
@@ -290,6 +299,8 @@ function formatBrandTitle(rawTitle: string): string {
 
 type PageContext = 'index' | 'game' | 'policy';
 
+export type SectionNavItem = { id: string; label: string; type: string; order?: number };
+
 type NavItem = {
   href: string;
   label: string;
@@ -297,17 +308,28 @@ type NavItem = {
   type?: 'game' | 'default';
 };
 
-function buildNavItems(currentPage: PageContext, websiteTypes: string[]): NavItem[] {
+function buildNavItems(
+  currentPage: PageContext,
+  websiteTypes: string[],
+  sectionAnchors: SectionNavItem[] = []
+): NavItem[] {
   const hasGame = websiteTypes.includes('Game');
   const items: NavItem[] = [];
   items.push({ href: 'index.html', label: 'Home', active: currentPage === 'index' });
   if (hasGame) {
     items.push({ href: 'game.html', label: 'Play Game!', active: currentPage === 'game', type: 'game' });
   }
-  const featuresHref = currentPage === 'index' ? '#features' : 'index.html#features';
-  items.push({ href: featuresHref, label: 'Features' });
-  const contactHref = currentPage === 'index' ? '#contact' : 'index.html#contact';
-  items.push({ href: contactHref, label: 'Contact' });
+  const seen = new Set<string>();
+  for (const anchor of sectionAnchors) {
+    const anchorId = (anchor.id || '').trim();
+    if (!anchorId) continue;
+    const key = anchor.type || anchorId;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const href = currentPage === 'index' ? `#${anchorId}` : `index.html#${anchorId}`;
+    const label = anchor.label?.trim() || anchorId.replace(/-/g, ' ');
+    items.push({ href, label });
+  }
   items.push({ href: 'privacy-policy.html', label: 'Privacy', active: currentPage === 'policy' });
   return items;
 }
@@ -369,9 +391,10 @@ function renderHeader(
   theme: BrandingTheme,
   websiteTypes: string[],
   brandVisual: BrandVisual,
-  currentPage: PageContext
+  currentPage: PageContext,
+  sectionAnchors: SectionNavItem[] = []
 ): string {
-  const items = buildNavItems(currentPage, websiteTypes);
+  const items = buildNavItems(currentPage, websiteTypes, sectionAnchors);
   return `
     <header id="header" class="${theme.headerClass} fixed top-0 left-0 right-0 z-40 transition-shadow duration-300">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -403,23 +426,158 @@ function renderHeader(
   `;
 }
 
+type FooterVariant = (payload: { title: string; theme: BrandingTheme }) => string;
+
+const footerVariants: FooterVariant[] = [
+  ({ title, theme }) => {
+    const accentText = theme.mode === 'light' ? 'text-slate-600' : 'text-slate-300';
+    const strongText = theme.mode === 'light' ? 'text-slate-900' : 'text-white';
+    return `
+      <div class="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-6 ${theme.footerTextClass}">
+          <div>
+            <p class="${accentText} text-sm mb-1">Crafted with care</p>
+            <h3 class="${strongText} text-xl font-semibold">${title}</h3>
+            <p class="${accentText} text-sm mt-2">Design direction, storytelling, and responsive code merged into one streamlined concept.</p>
+          </div>
+          <div class="flex items-center gap-4 text-sm">
+            <a href="mailto:hello@${title.replace(/\s+/g, '').toLowerCase()}.com" class="hover:text-indigo-400 transition">Email</a>
+            <span class="opacity-40">•</span>
+            <a href="privacy-policy.html" class="hover:text-indigo-400 transition">Privacy</a>
+            <span class="opacity-40">•</span>
+            <a href="#contact" class="hover:text-indigo-400 transition">Contact</a>
+          </div>
+        </div>
+      </div>`;
+  },
+  ({ title, theme }) => {
+    const borderClass = theme.mode === 'light' ? 'border-slate-200' : 'border-white/10';
+    const accent = theme.mode === 'light' ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' : 'bg-gradient-to-r from-indigo-400 to-rose-400 text-slate-900';
+    return `
+      <div class="max-w-6xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <div class="rounded-3xl border ${borderClass} overflow-hidden flex flex-col md:flex-row items-stretch">
+          <div class="flex-1 p-8 ${theme.footerTextClass}">
+            <h3 class="text-2xl font-semibold mb-3">Stay in the loop</h3>
+            <p class="text-sm opacity-80">Monthly insights, launch announcements, and zero spam. ${title} curates only the essentials.</p>
+            <form class="mt-6 flex gap-3" onsubmit="return false;">
+              <input type="email" required placeholder="name@example.com" class="flex-1 rounded-xl bg-white/10 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+              <button class="${accent} px-5 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20">Subscribe</button>
+            </form>
+          </div>
+          <div class="md:w-64 p-8 ${accent} flex flex-col gap-3">
+            <p class="text-sm font-semibold uppercase tracking-wide">Quick links</p>
+            <a href="#" class="text-sm opacity-90 hover:opacity-100 transition">Press kit</a>
+            <a href="#" class="text-sm opacity-90 hover:opacity-100 transition">Brand assets</a>
+            <a href="#" class="text-sm opacity-90 hover:opacity-100 transition">Request a call</a>
+          </div>
+        </div>
+        <p class="${theme.footerTextClass} text-xs text-center mt-6">&copy; ${new Date().getFullYear()} ${title}. Crafted concepts, not production builds.</p>
+      </div>`;
+  },
+  ({ title, theme }) => {
+    const accentBorder = theme.mode === 'light' ? 'border-indigo-200' : 'border-indigo-500/60';
+    const badgeClass = theme.mode === 'light' ? 'bg-indigo-100 text-indigo-600' : 'bg-indigo-500/20 text-indigo-200';
+    const textMuted = theme.mode === 'light' ? 'text-slate-600' : 'text-slate-300';
+    return `
+      <div class="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8 ${theme.footerTextClass}">
+        <div class="grid md:grid-cols-3 gap-8">
+          <div>
+            <span class="inline-flex px-3 py-1 rounded-full text-xs font-medium ${badgeClass}">Design Studio Prototype</span>
+            <h3 class="text-xl font-semibold mt-4">${title}</h3>
+            <p class="${textMuted} text-sm mt-2">This vision concept showcases tone of voice, motion cues, and structural hierarchy tailored for the brand.</p>
+          </div>
+          <div class="md:col-span-2 grid sm:grid-cols-2 gap-6">
+            <div class="rounded-2xl border ${accentBorder} p-5">
+              <h4 class="font-semibold mb-2">Ready to iterate?</h4>
+              <p class="${textMuted} text-sm">Request bespoke sections, animations, or CMS-ready handover from the studio team.</p>
+            </div>
+            <div class="rounded-2xl border ${accentBorder} p-5">
+              <h4 class="font-semibold mb-2">Need policy details?</h4>
+              <p class="${textMuted} text-sm">Our privacy stance is transparent and human-readable. <a href="privacy-policy.html" class="underline hover:text-indigo-300">Review the policy</a>.</p>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  },
+];
+
 function renderFooter(title: string, theme: BrandingTheme): string {
+  const variant = randomChoice(footerVariants);
   return `
     <footer class="${theme.footerClass}">
-      <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 text-center ${theme.footerTextClass}">
-        <p>&copy; ${new Date().getFullYear()} ${title}. All rights reserved.</p>
-        <a href="privacy-policy.html" class="text-sm hover:text-indigo-400">Privacy Policy</a>
-      </div>
+      ${variant({ title, theme })}
     </footer>
   `;
 }
 
+type CookieBannerVariant = {
+  id: string;
+  wrapperClass: string;
+  iconClass: string;
+  icon: string;
+  text: string;
+};
+
+const cookieBannerVariants: CookieBannerVariant[] = [
+  {
+    id: 'classic',
+    wrapperClass: 'max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4',
+    iconClass: 'text-amber-300 bg-white/10 border border-white/20',
+    icon: 'fa-solid fa-cookie-bite',
+    text: 'We use cookies to personalize content and remember your preferences. Accepting means you agree to tasty improvements.',
+  },
+  {
+    id: 'minimal',
+    wrapperClass: 'max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3',
+    iconClass: 'text-indigo-300 bg-indigo-950/40 border border-indigo-400/30',
+    icon: 'fa-solid fa-mug-hot',
+    text: 'Cookies keep the experience warm and smooth. We only use the essentials.',
+  },
+  {
+    id: 'playful',
+    wrapperClass: 'max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4',
+    iconClass: 'text-pink-300 bg-pink-900/30 border border-pink-400/30 animate-pulse',
+    icon: 'fa-solid fa-ice-cream',
+    text: 'A sprinkle of cookies powers animations, stats, and saved settings. Consent keeps the magic sweet.',
+  },
+  {
+    id: 'serious',
+    wrapperClass: 'max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4',
+    iconClass: 'text-emerald-300 bg-emerald-900/30 border border-emerald-400/30',
+    icon: 'fa-solid fa-shield-halved',
+    text: 'We rely on cookies for secure sessions and analytics. Approve to help us guard your experience.',
+  },
+];
+
+function pickCookieBannerVariant(): CookieBannerVariant {
+  if (!cookieBannerVariants.length) {
+    return {
+      id: 'fallback',
+      wrapperClass: 'max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4',
+      iconClass: 'text-amber-300 bg-white/10 border border-white/20',
+      icon: 'fa-solid fa-cookie-bite',
+      text: 'We use cookies to enhance your experience. By accepting, you agree to our use of cookies.',
+    };
+  }
+  const index = Math.floor(Math.random() * cookieBannerVariants.length);
+  return cookieBannerVariants[index];
+}
+
 function renderCookieBanner(theme: BrandingTheme): string {
+  const variant = pickCookieBannerVariant();
   return `
-    <div id="cookie-banner" class="${theme.cookieBannerClass}">
-      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-        <p class="${theme.cookieTextClass}">We use cookies to enhance your experience. By accepting, you agree to our use of cookies.</p>
-        <button id="accept-cookies" class="${theme.cookieButtonClass}">Accept</button>
+    <div id="cookie-banner" class="${theme.cookieBannerClass}" data-variant="${variant.id}">
+      <div class="${variant.wrapperClass}">
+        <div class="flex items-center gap-3 text-sm sm:text-base ${theme.cookieTextClass}">
+          <span class="inline-flex h-10 w-10 items-center justify-center rounded-full ${variant.iconClass}" aria-hidden="true">
+            <i class="${variant.icon}"></i>
+          </span>
+          <p>${variant.text}</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="accept-cookies" class="${theme.cookieButtonClass}">Accept</button>
+          <a href="privacy-policy.html#cookies" class="text-xs sm:text-sm underline hover:text-white/80">Cookie policy</a>
+        </div>
       </div>
     </div>
   `;
@@ -430,6 +588,7 @@ export const getIndexHtmlTemplate = (
   title: string,
   allSectionsHtml: string,
   websiteTypes: string[] = [],
+  sectionAnchors: SectionNavItem[] = [],
   theme?: BrandingTheme,
   brandVisual?: BrandVisual,
   faviconPath?: string
@@ -458,7 +617,7 @@ export const getIndexHtmlTemplate = (
     </style>
 </head>
 <body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="index">
-    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index')}
+    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index', sectionAnchors)}
 
     <main class="pt-16">
         ${allSectionsHtml}
@@ -476,11 +635,75 @@ export const getIndexHtmlTemplate = (
 };
 
 // Оновлено: шаблон для ігрової сторінки
+type GamePageVariant = {
+  badge?: string;
+  subtitle?: string;
+  bulletList?: string[];
+  ctaLabel: string;
+  ctaIcon?: string;
+  supportNote?: string;
+};
+
+const gamePageVariants: GamePageVariant[] = [
+  {
+    badge: 'Live Demo Access',
+    subtitle: 'Preview the interactive lobby with adaptive controls before the full build ships.',
+    bulletList: ['Instant load, zero plugins', 'Touch-friendly controls', 'Analytics-ready events'],
+    ctaLabel: 'Launch Fullscreen',
+    ctaIcon: 'fa-solid fa-expand',
+    supportNote: 'Need additional skins or localized assets? Mention it in the handoff notes.',
+  },
+  {
+    badge: 'Playable Concept',
+    subtitle: 'This sandbox simulates core mechanics, transitions, and monetization hooks.',
+    bulletList: ['Audio-ready environment', 'Supports keyboard + gamepad', 'Built for rapid iteration'],
+    ctaLabel: 'Play Immersive Mode',
+    ctaIcon: 'fa-solid fa-vr-cardboard',
+    supportNote: 'Hook the iframe into your analytics stack or wrap it as a PWA for quick demos.',
+  },
+  {
+    badge: 'Experience Preview',
+    subtitle: 'See the cinematic entry, interactive HUD, and responsible play overlays in action.',
+    bulletList: ['Particle-rich transitions', 'Session-safe overlays', 'Configurable bonus timers'],
+    ctaLabel: 'Enter Demo Arena',
+    ctaIcon: 'fa-solid fa-play-circle',
+  },
+];
+
+type PolicyVariant = {
+  heroTitle: string;
+  heroCopy: string;
+  highlightTitle: string;
+  highlightCopy: string;
+};
+
+const policyVariants: PolicyVariant[] = [
+  {
+    heroTitle: 'Privacy without the maze',
+    heroCopy: 'This document is structured for humans, legal teams, and regulators alike. Scan, audit, and share with confidence.',
+    highlightTitle: 'Versioned & transparent',
+    highlightCopy: 'We tag each revision with a timestamp, changelog, and point of contact so compliance stays stress-free.',
+  },
+  {
+    heroTitle: 'Data respect is the default',
+    heroCopy: 'Every tracking event and cookie has a purpose, documented here. Nothing hides in the fine print.',
+    highlightTitle: 'Your control panel',
+    highlightCopy: 'Download, delete, or export your data with a single request. We respond within two business days.',
+  },
+  {
+    heroTitle: 'Trust scales with clarity',
+    heroCopy: 'Plain-language sections outline how we collect, store, and safeguard information across platforms.',
+    highlightTitle: 'Security first',
+    highlightCopy: 'SOC2-aligned processes, rotating keys, and continuous monitoring keep your data protected.',
+  },
+];
+
 export const getGamePageTemplate = (
   title: string,
   gamePageTitle: string,
   gameIframePath: string,
   disclaimerHtml: string,
+  sectionAnchors: SectionNavItem[] = [],
   theme?: BrandingTheme,
   brandVisual?: BrandVisual,
   websiteTypes: string[] = [],
@@ -491,6 +714,7 @@ export const getGamePageTemplate = (
   const faviconTag = faviconPath
     ? `<link rel="icon" type="image/png" href="${faviconPath}">`
     : '';
+  const variant = randomChoice(gamePageVariants);
   const headingClass = appliedTheme.mode === 'light' ? 'text-[#1f2440]' : 'text-white';
   const textClass = appliedTheme.mode === 'light' ? 'text-[#3b456a]' : 'text-gray-200/90';
   const frameWrapperClass = appliedTheme.mode === 'light'
@@ -519,18 +743,31 @@ export const getGamePageTemplate = (
     </style>
 </head>
 <body class="${appliedTheme.bodyClass}" data-has-game="true" data-page="game">
-    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game')}
+    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game', sectionAnchors)}
 
     <main class="flex-grow flex flex-col items-center justify-center p-4">
-        <h1 class="${headingClass} text-3xl md:text-5xl font-bold text-center mb-6">${gamePageTitle}</h1>
+        <div class="flex flex-col items-center gap-2 mb-2">
+          ${variant.badge ? `<span class="px-4 py-1 rounded-full text-xs font-semibold bg-white/10 border border-white/10 uppercase tracking-wide">${variant.badge}</span>` : ''}
+          <h1 class="${headingClass} text-3xl md:text-5xl font-bold text-center">${gamePageTitle}</h1>
+        </div>
+        ${variant.subtitle ? `<p class="${textClass} text-center max-w-2xl text-sm md:text-base mb-6">${variant.subtitle}</p>` : ''}
         <div class="${frameWrapperClass}">
             <iframe src="${gameIframePath}" frameborder="0" class="w-full h-full rounded-[18px]"></iframe>
         </div>
         <div class="${disclaimerBoxClass} ${textClass}">
             ${disclaimerHtml}
         </div>
+        ${variant.bulletList ? `
+          <ul class="mt-6 grid sm:grid-cols-3 gap-3 w-full max-w-5xl text-sm ${textClass}">
+            ${variant.bulletList.map((item) => `<li class="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 flex gap-2 items-start"><i class="fa-solid fa-sparkles mt-1 opacity-70"></i><span>${item}</span></li>`).join('')}
+          </ul>
+        ` : ''}
         <div class="mt-6">
           <a href="index.html" class="${backButtonClass}"><i class="fa-solid fa-arrow-left"></i> Back to Home</a>
+        </div>
+        <div class="mt-6 flex flex-col sm:flex-row gap-3">
+          <a href="${gameIframePath}" target="_blank" class="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-indigo-500/20 text-sm font-semibold hover:bg-indigo-500/30 transition text-white"><i class="${variant.ctaIcon || 'fa-solid fa-play'}"></i>${variant.ctaLabel}</a>
+          ${variant.supportNote ? `<span class="${textClass} text-xs max-w-sm">${variant.supportNote}</span>` : ''}
         </div>
     </main>
 
@@ -548,12 +785,14 @@ export const getPrivacyPolicyTemplate = (
   title: string,
   domain: string,
   policyContentHtml: string,
+  sectionAnchors: SectionNavItem[] = [],
   theme?: BrandingTheme,
   brandVisual?: BrandVisual,
   websiteTypes: string[] = [],
   faviconPath?: string
 ) => {
   const contactEmail = `contact@${domain}`;
+  const policyVariant = randomChoice(policyVariants);
   const menuItems = Array.from(policyContentHtml.matchAll(/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/g))
     .map(match => ({ id: match[1], title: match[2] }));
   const appliedTheme = resolveTheme(theme);
@@ -593,9 +832,21 @@ export const getPrivacyPolicyTemplate = (
     </style>
 </head>
 <body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="policy">
-    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy')}
+    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy', sectionAnchors)}
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <section class="rounded-3xl border border-white/10 bg-white/5 backdrop-blur mb-12 p-8 ${appliedTheme.mode === 'light' ? 'bg-white shadow-[0_24px_45px_rgba(90,110,255,0.18)] text-slate-700' : 'text-slate-100'}">
+          <div class="flex flex-col lg:flex-row gap-6 items-start lg:items-center justify-between">
+            <div class="max-w-2xl">
+              <h1 class="text-3xl sm:text-4xl font-bold mb-3">${policyVariant.heroTitle}</h1>
+              <p class="text-sm sm:text-base opacity-80">${policyVariant.heroCopy}</p>
+            </div>
+            <div class="rounded-2xl border border-indigo-400/20 bg-indigo-500/10 px-5 py-4 text-sm max-w-sm">
+              <h2 class="font-semibold mb-1">${policyVariant.highlightTitle}</h2>
+              <p class="opacity-90">${policyVariant.highlightCopy}</p>
+            </div>
+          </div>
+        </section>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
             <main class="md:col-span-3 ${proseClass}">
                 <h1 class="${headingClass} text-4xl sm:text-5xl font-extrabold !mb-8">Privacy Policy</h1>

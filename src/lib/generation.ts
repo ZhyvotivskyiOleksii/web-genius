@@ -17,8 +17,18 @@ import {
   chooseBrandingTheme,
   inferBrandVisual,
 } from '@/lib/templates';
+import type { SectionNavItem } from '@/lib/templates';
 import { deriveDomainName } from '@/lib/domain';
 import manifest from '@/lib/asset-manifest.json';
+
+function randomChoice<T>(items: T[], fallback?: T): T {
+  if (!items || items.length === 0) {
+    if (fallback !== undefined) return fallback;
+    throw new Error('randomChoice called with empty array');
+  }
+  const index = Math.floor(Math.random() * items.length);
+  return items[index] ?? (fallback !== undefined ? fallback : items[0]);
+}
 
 function detectLanguage(prompt: string): { name: string; iso: string } {
   const text = (prompt || '').toLowerCase();
@@ -73,40 +83,255 @@ function detectLanguage(prompt: string): { name: string; iso: string } {
   return { name: 'English', iso: 'en' };
 }
 
+type SectionSpec = { type: string; titles: ((site: string) => string)[]; details?: ((site: string) => string)[] };
+
+const englishSectionLibrary: SectionSpec[] = [
+  {
+    type: 'hero',
+    titles: [
+      (site) => `Discover ${site}`,
+      (site) => `Experience ${site}`,
+      (site) => `${site}: Crafted for Forward Thinkers`,
+      (site) => `Step Into ${site}`,
+    ],
+    details: [
+      () => 'A bold digital launchpad built with cinematic visuals and human-first storytelling.',
+      () => 'An immersive hero spotlight that merges narrative copy with kinetic UI gestures.',
+      () => 'Spark curiosity with a layered hero atmosphere and adaptive call-to-action states.',
+    ],
+  },
+  {
+    type: 'about',
+    titles: [
+      () => 'Our Origin Story',
+      () => 'Who We Champion',
+      () => 'The Journey So Far',
+      () => 'Built by Explorers',
+    ],
+    details: [
+      () => 'Paint a timeline narrative explaining mission, founding sparks, and guiding principles.',
+      () => 'Highlight the people, culture, and beliefs that power the brand every day.',
+    ],
+  },
+  {
+    type: 'features',
+    titles: [
+      () => 'Signature Highlights',
+      () => 'What Sets Us Apart',
+      () => 'Core Experience Pillars',
+      () => 'Reasons Teams Switch',
+    ],
+    details: [
+      () => 'Curate three to five feature tiles with iconography, emotional benefit, and proof.',
+      () => 'Blend performance metrics with story-driven copy for each differentiator.',
+    ],
+  },
+  {
+    type: 'stats',
+    titles: [
+      () => 'Momentum in Numbers',
+      () => 'Impact Dashboard',
+      () => 'Growth Signals',
+      () => 'Quantified Wins',
+    ],
+    details: [
+      () => 'Feature animated counters, sparkline charts, and celebratory microcopy.',
+    ],
+  },
+  {
+    type: 'parallax',
+    titles: [
+      () => 'Immersive Moments',
+      () => 'Scenes from the Universe',
+      () => 'Behind the Experience',
+    ],
+    details: [
+      () => 'Use layered imagery, scroll-based reveals, and short captions to dramatize the brand.',
+    ],
+  },
+  {
+    type: 'faq',
+    titles: [
+      () => 'Questions People Ask',
+      () => 'Answers on Demand',
+      () => 'Help Center Highlights',
+    ],
+    details: [
+      () => 'Draft conversational Q&A with supportive microcopy and direct action prompts.',
+    ],
+  },
+  {
+    type: 'responsible',
+    titles: [
+      () => 'Responsible Play Matters',
+      () => 'Safe & Transparent',
+      () => 'Ethics at the Core',
+    ],
+    details: [
+      () => 'Outline policies, safeguards, and support resources with trust badges.',
+    ],
+  },
+  {
+    type: 'cta',
+    titles: [
+      () => 'Ready to Dive In?',
+      () => 'Start Your Next Chapter',
+      () => 'Launch the Experience',
+    ],
+    details: [
+      () => 'Pair a bold CTA with social proof, guarantee, or onboarding teaser.',
+    ],
+  },
+];
+
+const polishSectionLibrary: SectionSpec[] = [
+  {
+    type: 'hero',
+    titles: [
+      (site) => `Poznaj ${site}`,
+      (site) => `${site}: Twój nowy kierunek`,
+      (site) => `Wejdź do świata ${site}`,
+    ],
+    details: [
+      () => 'Hero o filmowej estetyce z mocnym hasłem i dynamiczną grafiką.',
+      () => 'Wyeksponuj kluczową propozycję wartości oraz przycisk akcji.',
+    ],
+  },
+  {
+    type: 'about',
+    titles: [
+      () => 'Kim jesteśmy',
+      () => 'Nasza historia',
+      () => 'Zespół i wartości',
+    ],
+    details: [
+      () => 'Przedstaw genezę, misję i unikalną kulturę marki.',
+    ],
+  },
+  {
+    type: 'features',
+    titles: [
+      () => 'Najważniejsze atuty',
+      () => 'Co oferujemy',
+      () => 'Powody, by nam zaufać',
+    ],
+    details: [
+      () => 'Zbuduj sekcję kart z ikonami i benefitami opisanymi językiem korzyści.',
+    ],
+  },
+  {
+    type: 'stats',
+    titles: [
+      () => 'Kluczowe liczby',
+      () => 'Wyniki i osiągnięcia',
+      () => 'Nasze tempo wzrostu',
+    ],
+  },
+  {
+    type: 'parallax',
+    titles: [
+      () => 'Zajrzyj za kulisy',
+      () => 'Galeria wrażeń',
+    ],
+  },
+  {
+    type: 'faq',
+    titles: [
+      () => 'Najczęstsze pytania',
+      () => 'Masz wątpliwości?',
+    ],
+  },
+  {
+    type: 'responsible',
+    titles: [
+      () => 'Odpowiedzialna rozrywka',
+      () => 'Bezpieczeństwo i wsparcie',
+    ],
+  },
+  {
+    type: 'cta',
+    titles: [
+      () => 'Dołącz teraz',
+      () => 'Sprawdź demo',
+      () => 'Rozpocznij dziś',
+    ],
+  },
+];
+
+const ukrainianSectionLibrary: SectionSpec[] = [
+  {
+    type: 'hero',
+    titles: [
+      (site) => `Відкрийте ${site}`,
+      (site) => `${site}: новий вимір`,
+      (site) => `Зануртесь у ${site}`,
+    ],
+  },
+  {
+    type: 'about',
+    titles: [
+      () => 'Про команду',
+      () => 'Наша історія',
+      () => 'Цінності та люди',
+    ],
+  },
+  {
+    type: 'features',
+    titles: [
+      () => 'Головні переваги',
+      () => 'Чому ми інші',
+      () => 'Особливості сервісу',
+    ],
+  },
+  {
+    type: 'stats',
+    titles: [
+      () => 'Цифри, що надихають',
+      () => 'Ми зростаємо',
+    ],
+  },
+  {
+    type: 'parallax',
+    titles: [
+      () => 'Яскраві моменти',
+      () => 'Живі кадри',
+    ],
+  },
+  {
+    type: 'faq',
+    titles: [
+      () => 'Поширені запитання',
+      () => 'FAQ',
+    ],
+  },
+  {
+    type: 'responsible',
+    titles: [
+      () => 'Відповідальна гра',
+      () => 'Безпека та довіра',
+    ],
+  },
+  {
+    type: 'cta',
+    titles: [
+      () => 'Спробуйте демо',
+      () => 'Почніть зараз',
+    ],
+  },
+];
+
+function buildSectionTemplates(library: SectionSpec[], siteName: string) {
+  return library.map((spec) => ({
+    type: spec.type,
+    title: randomChoice(spec.titles.map((fn) => fn(siteName))),
+    details: spec.details ? randomChoice(spec.details.map((fn) => fn(siteName))) : undefined,
+  }));
+}
+
 function getLocalizedSectionTemplates(language: string, siteName: string) {
-  const templates: Record<string, { type: string; title: string; details?: string }[]> = {
-    English: [
-      { type: 'hero', title: `Experience ${siteName}` },
-      { type: 'about', title: 'About Us' },
-      { type: 'features', title: 'Highlights & Features' },
-      { type: 'stats', title: 'Key Stats & Milestones' },
-      { type: 'parallax', title: 'Immersive Moments' },
-      { type: 'faq', title: 'Frequently Asked Questions' },
-      { type: 'responsible', title: 'Responsible Entertainment' },
-      { type: 'cta', title: 'Try the Demo Experience' },
-    ],
-    Polish: [
-      { type: 'hero', title: `Poznaj ${siteName}` },
-      { type: 'about', title: 'O nas' },
-      { type: 'features', title: 'Najważniejsze atuty' },
-      { type: 'stats', title: 'Statystyki i sukcesy' },
-      { type: 'parallax', title: 'Sportowe emocje' },
-      { type: 'faq', title: 'Najczęstsze pytania' },
-      { type: 'responsible', title: 'Odpowiedzialna rozrywka' },
-      { type: 'cta', title: 'Wypróbuj demo' },
-    ],
-    Ukrainian: [
-      { type: 'hero', title: `Відкрийте ${siteName}` },
-      { type: 'about', title: 'Про нас' },
-      { type: 'features', title: 'Наші переваги' },
-      { type: 'stats', title: 'Статистика та досягнення' },
-      { type: 'parallax', title: 'Яскраві моменти' },
-      { type: 'faq', title: 'Поширені запитання' },
-      { type: 'responsible', title: 'Відповідальна гра' },
-      { type: 'cta', title: 'Спробуйте демо' },
-    ],
-  };
-  return templates[language] || templates.English;
+  if (language === 'Polish') return buildSectionTemplates(polishSectionLibrary, siteName);
+  if (language === 'Ukrainian') return buildSectionTemplates(ukrainianSectionLibrary, siteName);
+  return buildSectionTemplates(englishSectionLibrary, siteName);
 }
 
 function shuffleArray<T>(items: T[]): T[] {
@@ -155,6 +380,61 @@ function createStyleHintPool(themeMode: 'light' | 'dark', isGameSite: boolean): 
     return ['Use layered gradients, floating particles, and parallax imagery to keep the section dynamic.'];
   }
   return shuffleArray(Array.from(new Set(pool)));
+}
+
+function sanitizeSectionHtml(html: string): string {
+  if (!html) return '';
+  let clean = html;
+  const patterns = [
+    /<\s*(header|nav|footer)[^>]*>[\s\S]*?<\/\s*\1>/gi,
+    /<\s*style[^>]*>[\s\S]*?<\/\s*style>/gi,
+    /<\s*script[^>]*>[\s\S]*?<\/\s*script>/gi,
+    /<!--[\s\S]*?-->/g,
+  ];
+  for (const pattern of patterns) {
+    clean = clean.replace(pattern, '');
+  }
+  return clean.trim();
+}
+
+function sanitizeIdCandidate(value: string): string {
+  return (value || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function stripNavLikeBlocks(html: string): string {
+  if (!html) return '';
+  let cleaned = html;
+  const regex = /<(div|section)[^>]*class="[^"]*(?:nav|navbar|menu|header)[^"]*"[^>]*>[\s\S]*?<\/\1>/gi;
+  cleaned = cleaned.replace(regex, '');
+  return cleaned;
+}
+
+type NavRule = { key: string; label: string; pattern: RegExp };
+
+const NAV_RULES: NavRule[] = [
+  { key: 'about', label: 'About', pattern: /(about|story|mission|who|team|values)/i },
+  { key: 'features', label: 'Features', pattern: /(feature|benefit|highlight|advantage|why)/i },
+  { key: 'games', label: 'Games', pattern: /(game|collection|gallery|experience)/i },
+  { key: 'pricing', label: 'Pricing', pattern: /(pricing|plan|package|subscription)/i },
+  { key: 'faq', label: 'FAQ', pattern: /(faq|question|help)/i },
+  { key: 'contact', label: 'Contact', pattern: /(contact|support|reach|connect|get in touch|message)/i },
+];
+
+function resolveNavAnchor(section: { type?: string; title?: string }): { key: string; label: string; order: number } | null {
+  const typeToken = (section.type || '').toLowerCase();
+  const title = (section.title || '').trim();
+  const haystack = `${typeToken} ${title.toLowerCase()}`.trim();
+  for (let idx = 0; idx < NAV_RULES.length; idx++) {
+    const rule = NAV_RULES[idx];
+    if (rule.pattern.test(haystack)) {
+      return { key: rule.key, label: rule.label, order: idx };
+    }
+  }
+  return null;
 }
 
 // Helper to grab all files within a directory (used for game bundles)
@@ -338,6 +618,9 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const sectionResults: { html: string; model?: string }[] = [];
     const CHUNK_SIZE = 4;
     const ctaTarget = isGameSite ? 'game.html' : undefined;
+    const sectionIdSet = new Set<string>();
+    const navAnchors: SectionNavItem[] = [];
+    const navKeysSeen = new Set<string>();
 
     for (let i = 0; i < mainSections.length; i += CHUNK_SIZE) {
       const slice = mainSections.slice(i, i + CHUNK_SIZE);
@@ -358,12 +641,70 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         });
         if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
         if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
-        return { html: res.htmlContent, model: res.model };
+        let cleanHtml = sanitizeSectionHtml(res.htmlContent || '');
+        if (!cleanHtml) {
+          return { html: '', model: res.model };
+        }
+        if ((section.type || '').toLowerCase() === 'hero') {
+          cleanHtml = stripNavLikeBlocks(cleanHtml);
+        }
+        const baseCandidate = sanitizeIdCandidate(section.type || section.title || `section-${i + index + 1}`) || `section-${i + index + 1}`;
+        let candidate = baseCandidate;
+        let attempt = 1;
+        while (sectionIdSet.has(candidate)) {
+          candidate = `${baseCandidate}-${++attempt}`;
+        }
+        sectionIdSet.add(candidate);
+
+        if (/^<section\b/i.test(cleanHtml)) {
+          cleanHtml = cleanHtml.replace(/^<section\b([^>]*)>/i, (match, attrs) => {
+            let updated = attrs || '';
+            if (/id\s*=/.test(updated)) {
+              updated = updated.replace(/id\s*=\s*"[^"]*"/i, ` id="${candidate}"`);
+            } else {
+              updated += ` id="${candidate}"`;
+            }
+            if (section.type && !/data-section-type=/.test(updated)) {
+              updated += ` data-section-type="${section.type}"`;
+            }
+            return `<section${updated}>`;
+          });
+        } else {
+          const sectionTypeAttr = section.type ? ` data-section-type="${section.type}"` : '';
+          cleanHtml = `<section id="${candidate}"${sectionTypeAttr} class="generated-section">${cleanHtml}</section>`;
+        }
+
+        const navInfo = resolveNavAnchor(section);
+        if (navInfo && !navKeysSeen.has(navInfo.key)) {
+          navKeysSeen.add(navInfo.key);
+          navAnchors.push({ id: candidate, label: navInfo.label, type: navInfo.key, order: navInfo.order });
+        } else if (!navInfo) {
+          const fallbackLabelSource = (section.title || section.type || 'Section').trim();
+          const words = fallbackLabelSource.split(/\s+/).filter(Boolean);
+          const fallbackLabel = words
+            .slice(0, Math.min(words.length, 2))
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ') || 'Section';
+          const fallbackKey = `section-${candidate}`;
+          if (!navKeysSeen.has(fallbackKey)) {
+            navKeysSeen.add(fallbackKey);
+            navAnchors.push({ id: candidate, label: fallbackLabel, type: fallbackKey, order: NAV_RULES.length + navAnchors.length });
+          }
+        }
+
+        return { html: cleanHtml, model: res.model };
       }));
       sectionResults.push(...generated);
     }
 
     const allSectionsHtml = sectionResults.map(result => result.html).join('\n\n');
+    const sortedNavAnchors = navAnchors
+      .sort((a, b) => {
+        const orderA = a.order ?? (NAV_RULES.length + 100);
+        const orderB = b.order ?? (NAV_RULES.length + 100);
+        return orderA - orderB;
+      })
+      .slice(0, 4);
 
     const policyLanguage = languageName;
     console.log(`Step 2.3: Generating unique privacy policy in ${policyLanguage}...`);
@@ -405,6 +746,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         gamePageContentResult.title,
         gameIframePath,
         gamePageContentResult.disclaimerHtml,
+        sortedNavAnchors,
         brandTheme,
         brandVisual,
         websiteTypes,
@@ -425,8 +767,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
 
     // Add standard files
-    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, brandTheme, brandVisual, selectedFaviconPath);
-    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, normalizedDomain, policyContentHtml, brandTheme, brandVisual, websiteTypes, selectedFaviconPath);
+    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, sortedNavAnchors, brandTheme, brandVisual, selectedFaviconPath);
+    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, normalizedDomain, policyContentHtml, sortedNavAnchors, brandTheme, brandVisual, websiteTypes, selectedFaviconPath);
     files['scripts/main.js'] = mainJsTemplate;
     files['styles/style.css'] = stylesCssTemplate;
     

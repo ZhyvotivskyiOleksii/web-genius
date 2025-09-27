@@ -141,6 +141,21 @@ type ElementTarget = {
 };
 
 const CHAT_CACHE_PREFIX = 'wg-chat-cache:';
+const toStringContent = (raw: unknown): string => {
+  if (typeof raw === 'string') return raw;
+  if (raw instanceof Uint8Array) {
+    try {
+      const decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
+      return decoder ? decoder.decode(raw) : '';
+    } catch {
+      return '';
+    }
+  }
+  if (raw != null) return String(raw);
+  return '';
+};
+type BulkModification = { fileName: string; code?: string | null | undefined };
+
 
 const getChatCacheKey = (siteId: string | null, slug: string) => {
   const safeSlug = slug && slug.length ? slug : 'untitled';
@@ -259,7 +274,7 @@ const normalizeCachedMessage = (entry: any): ChatMessage | null => {
         }
         return null;
       })
-      .filter((d): d is { file: string; added: number; removed: number } => d !== null);
+      .filter((d: { file: string; added: number; removed: number } | null): d is { file: string; added: number; removed: number } => d !== null);
     if (diffs.length) message.diffs = diffs;
   }
   return message;
@@ -413,7 +428,7 @@ export function SitePreview({
   const [revisions, setRevisions] = useState<Record<string, { before: string; after: string; ts: number; added: number; removed: number }[]>>({});
   const [diffView, setDiffView] = useState<{ file: string; before: string; after: string } | null>(null);
   const initialBulkState: any = { success: false, error: null, results: null, usage: null, model: null, chat: null };
-  const [bulkState, bulkFormAction, isBulkEditing] = useActionState(editCodeBulkAction as any, { ...initialBulkState, reasoning: null });
+  const [bulkState, bulkFormAction, isBulkEditing] = useActionState<any, FormData>(editCodeBulkAction as any, { ...initialBulkState, reasoning: null } as any);
   const [wholeSiteScope, setWholeSiteScope] = useState(true);
   const [pendingBulkOriginal, setPendingBulkOriginal] = useState<Record<string,string> | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -963,13 +978,13 @@ export function SitePreview({
   const [pendingElementTarget, setPendingElementTarget] = useState<ElementTarget | null>(null);
   const [pendingElementOriginalFile, setPendingElementOriginalFile] = useState<string>('');
   const [pendingElementOriginalCss, setPendingElementOriginalCss] = useState<string>('');
-  const [editState, editCodeFormAction, isEditing] = useActionState(
-    editCodeAction,
-    initialEditState
+  const [editState, editCodeFormAction, isEditing] = useActionState<any, FormData>(
+    editCodeAction as any,
+    initialEditState as any
   );
-  const [elementEditState, editElementFormAction, isElementEditing] = useActionState(
+  const [elementEditState, editElementFormAction, isElementEditing] = useActionState<any, FormData>(
     editElementAction as any,
-    initialElementEditState
+    initialElementEditState as any
   );
 
   const ensureProjectId = useCallback(async (): Promise<boolean> => {
@@ -1022,6 +1037,24 @@ export function SitePreview({
       console.error('Autosave failed', e);
     }
   }, 800), [siteId, userId]);
+
+  const queueSave = useCallback((path: string, rawContent: unknown) => {
+    const content = toStringContent(rawContent);
+    pendingSavesRef.current[path] = content;
+    flushSavesDebounced();
+  }, [flushSavesDebounced]);
+
+  useEffect(() => {
+    if (siteId && userId) {
+      flushSavesDebounced();
+    }
+    return () => {
+      if (typeof (flushSavesDebounced as any)?.cancel === 'function') {
+        (flushSavesDebounced as any).cancel();
+      }
+      flushSavesDebounced();
+    };
+  }, [siteId, userId, flushSavesDebounced]);
 
   const revStorageKey = useCallback((file: string) => `webgenius:revisions:${site.domain}:${file}`, [site.domain]);
 
@@ -1297,7 +1330,7 @@ export function SitePreview({
 
     let reasoning = bulkState.reasoning || 'Changes applied across the site.';
     const answer = bulkState.answer;
-    const modifications = bulkState.results;
+    const modifications = (bulkState.results || []) as BulkModification[];
 
     (async () => {
       const extras: ChatPersistExtras = {
@@ -1307,7 +1340,7 @@ export function SitePreview({
       };
 
       if (modifications && modifications.length > 0 && pendingBulkOriginal) {
-        const changes = modifications.map(mod => {
+        const changes = modifications.map((mod: BulkModification) => {
           const oldCode = pendingBulkOriginal[mod.fileName];
           const { added, removed } = computeDiffStats(oldCode ?? '', mod.code ?? '');
           return { file: mod.fileName, added, removed };
@@ -1421,7 +1454,7 @@ export function SitePreview({
       }
 
       if (files[path] !== undefined) { // It's a file
-        files[newPath] = files[path];
+        files[newPath] = toStringContent(files[path]);
         delete files[path];
         // Update tabs
         setOpenTabs(tabs => tabs.map(t => t.path === path ? { path: newPath } : t));
@@ -1438,7 +1471,7 @@ export function SitePreview({
           if (k.startsWith(prefix)) {
             const rest = k.slice(prefix.length);
             const newKey = `${newPath}/${rest}`;
-            newMap[newKey] = files[k];
+            newMap[newKey] = toStringContent(files[k]);
             delete files[k];
           }
         });
@@ -1881,7 +1914,7 @@ export function SitePreview({
         const base = fromPath.split('/').pop() as string;
         let dest = toDir ? `${toDir}/${base}` : base;
         if (files[dest]) dest = getUniquePath(dest, files);
-        files[dest] = files[fromPath];
+        files[dest] = toStringContent(files[fromPath]);
         delete files[fromPath];
         if (activeEditorTab === fromPath) setActiveEditorTab(dest);
         setOpenTabs(openTabs.map(t => t.path === fromPath ? { path: dest } : t));
@@ -1900,7 +1933,7 @@ export function SitePreview({
             const rest = k.slice(prefix.length);
             let newKey = `${targetBase}/${rest}`;
             if (files[newKey]) newKey = getUniquePath(newKey, { ...files, ...newMap });
-            newMap[newKey] = files[k];
+            newMap[newKey] = toStringContent(files[k]);
             delete files[k];
           }
         });
@@ -2667,7 +2700,7 @@ export function SitePreview({
     // Path autocompletion provider
     const completionProvider = monaco.languages.registerCompletionItemProvider(['html', 'css', 'javascript', 'typescript'], {
       triggerCharacters: ['"', "'", '/', '.'],
-      provideCompletionItems: (model, position) => {
+      provideCompletionItems: (model: any, position: any) => {
         const textUntilPosition = model.getValueInRange({
           startLineNumber: position.lineNumber,
           startColumn: 1,
@@ -3263,7 +3296,6 @@ export function SitePreview({
                     setSelectedFolderForNew('');
                     setIsAddFileOpen(true);
                   }}
-                  autoComplete="off"
                 >
                   <FilePlus className="h-4 w-4" />
                 </Button>
