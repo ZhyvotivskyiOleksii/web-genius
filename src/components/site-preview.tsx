@@ -3275,7 +3275,7 @@ export function SitePreview({
                     setSelectedFolderForNew('');
                     setIsAddFolderOpen(true);
                   }}
-                  autoComplete="off"
+                  
                 >
                   <FolderPlus className="h-4 w-4" />
                 </Button>
