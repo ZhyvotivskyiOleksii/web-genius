@@ -345,14 +345,14 @@ function renderLogo(title: string, theme: BrandingTheme, brandVisual: BrandVisua
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  const primaryIconSvg = renderSvgIcon(brandVisual.primaryIcon, 'brand-icon-main');
-  const secondaryIconSvg = brandVisual.secondaryIcon ? renderSvgIcon(brandVisual.secondaryIcon, 'brand-icon-secondary') : '';
+  const primaryIconImg = renderBrandIconImg(brandVisual.primaryIcon, 'brand-icon-main');
+  const secondaryIconImg = brandVisual.secondaryIcon ? renderBrandIconImg(brandVisual.secondaryIcon, 'brand-icon-secondary') : '';
   return `
     <a href="index.html" class="flex items-center gap-3 text-xl font-bold">
       <span class="brand-badge flex h-11 w-11 items-center justify-center rounded-2xl relative overflow-hidden ${theme.brandBadgeClass}">
         <span class="brand-initials" aria-hidden="true">${initials}</span>
-        ${primaryIconSvg}
-        ${secondaryIconSvg}
+        ${primaryIconImg}
+        ${secondaryIconImg}
       </span>
       <span class="brand-title" title="${titleAttr}">${displayText}</span>
     </a>`;
@@ -591,7 +591,9 @@ export const getIndexHtmlTemplate = (
   sectionAnchors: SectionNavItem[] = [],
   theme?: BrandingTheme,
   brandVisual?: BrandVisual,
-  faviconPath?: string
+  faviconPath?: string,
+  includeHeader: boolean = true,
+  includeFooter: boolean = true
 ) => {
   const appliedTheme = resolveTheme(theme);
   const brandGlyph = resolveBrandVisual(brandVisual);
@@ -617,13 +619,13 @@ export const getIndexHtmlTemplate = (
     </style>
 </head>
 <body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="index">
-    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index', sectionAnchors)}
+    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index', sectionAnchors) : ''}
 
-    <main class="pt-16">
+    <main class="${includeHeader ? 'pt-16' : ''}">
         ${allSectionsHtml}
     </main>
 
-    ${renderFooter(title, appliedTheme)}
+    ${includeFooter ? renderFooter(title, appliedTheme) : ''}
 
     ${renderCookieBanner(appliedTheme)}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
@@ -707,7 +709,9 @@ export const getGamePageTemplate = (
   theme?: BrandingTheme,
   brandVisual?: BrandVisual,
   websiteTypes: string[] = [],
-  faviconPath?: string
+  faviconPath?: string,
+  includeHeader: boolean = true,
+  includeFooter: boolean = true
 ) => {
   const appliedTheme = resolveTheme(theme);
   const brandGlyph = resolveBrandVisual(brandVisual);
@@ -743,7 +747,7 @@ export const getGamePageTemplate = (
     </style>
 </head>
 <body class="${appliedTheme.bodyClass}" data-has-game="true" data-page="game">
-    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game', sectionAnchors)}
+    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game', sectionAnchors) : ''}
 
     <main class="flex-grow flex flex-col items-center justify-center p-4">
         <div class="flex flex-col items-center gap-2 mb-2">
@@ -771,7 +775,7 @@ export const getGamePageTemplate = (
         </div>
     </main>
 
-    ${renderFooter(title, appliedTheme)}
+    ${includeFooter ? renderFooter(title, appliedTheme) : ''}
 
     ${renderCookieBanner(appliedTheme)}
     <script src="scripts/main.js"></script>
@@ -789,7 +793,9 @@ export const getPrivacyPolicyTemplate = (
   theme?: BrandingTheme,
   brandVisual?: BrandVisual,
   websiteTypes: string[] = [],
-  faviconPath?: string
+  faviconPath?: string,
+  includeHeader: boolean = true,
+  includeFooter: boolean = true
 ) => {
   const contactEmail = `contact@${domain}`;
   const policyVariant = randomChoice(policyVariants);
@@ -871,7 +877,7 @@ export const getPrivacyPolicyTemplate = (
         </div>
     </div>
 
-    ${renderFooter(title, appliedTheme)}
+    ${includeFooter ? renderFooter(title, appliedTheme) : ''}
 
     ${renderCookieBanner(appliedTheme)}
     <script src="scripts/main.js"></script>
@@ -906,21 +912,39 @@ document.addEventListener('DOMContentLoaded', function () {
         const pickedOrientation = orientations[Math.floor(Math.random() * orientations.length)];
         mobileNav.classList.add('mobile-nav-orientation-' + pickedOrientation);
 
-        const toggleMenu = () => {
-            const isNavOpen = mobileNav.classList.contains('mobile-nav-visible');
-            mobileNav.classList.toggle('mobile-nav-visible', !isNavOpen);
-            mobileNav.classList.toggle('mobile-nav-hidden', isNavOpen);
-            iconContainer.classList.toggle('is-open', !isNavOpen);
-            document.body.classList.toggle('overflow-hidden', !isNavOpen);
-            burgerMenu.setAttribute('aria-expanded', String(!isNavOpen));
+        const ensureClosed = () => {
+            mobileNav.classList.remove('mobile-nav-visible');
+            if (!mobileNav.classList.contains('mobile-nav-hidden')) {
+                mobileNav.classList.add('mobile-nav-hidden');
+            }
+            iconContainer.classList.remove('is-open');
+            document.body.classList.remove('overflow-hidden');
+            burgerMenu.setAttribute('aria-expanded', 'false');
         };
 
-        burgerMenu.addEventListener('click', toggleMenu);
+        ensureClosed();
+
+        const toggleMenu = () => {
+            const isNavOpen = mobileNav.classList.contains('mobile-nav-visible');
+            if (isNavOpen) {
+                ensureClosed();
+            } else {
+                mobileNav.classList.add('mobile-nav-visible');
+                mobileNav.classList.remove('mobile-nav-hidden');
+                iconContainer.classList.add('is-open');
+                document.body.classList.add('overflow-hidden');
+                burgerMenu.setAttribute('aria-expanded', 'true');
+            }
+        };
+
+        burgerMenu.addEventListener('click', (event) => {
+            event.preventDefault();
+            toggleMenu();
+        });
+
         mobileNav.querySelectorAll('a').forEach(link => {
             link.addEventListener('click', () => {
-                if (mobileNav.classList.contains('mobile-nav-visible')) {
-                    toggleMenu();
-                }
+                ensureClosed();
             });
         });
     }
@@ -1173,7 +1197,7 @@ section.generated-section :where(figcaption) {
     position: relative;
     color: inherit;
 }
-.brand-badge svg {
+.brand-badge svg, .brand-badge img {
     position: relative;
     width: 1.65rem;
     height: 1.65rem;
@@ -1271,7 +1295,20 @@ const iconLibrary: Record<string, string> = {
           <path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20M6.5 6.5l1.8 1.8M15.7 15.7l1.8 1.8M17.5 6.5l-1.8 1.8M8.3 15.7l-1.8 1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`
 };
 
-function renderSvgIcon(id: string, classes: string): string {
+function iconToDataUri(id: string): string {
   const content = iconLibrary[id] || iconLibrary['star'];
-  return `<svg class="${classes}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${content}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">${content}</svg>`;
+  const encoded = encodeURIComponent(svg)
+    .replace(/%20/g, ' ')
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29');
+  return `data:image/svg+xml;utf8,${encoded}`;
+}
+
+function renderBrandIconImg(id: string, classes: string): string {
+  const src = iconToDataUri(id);
+  const keyAttr = ` data-icon-key="${id}"`;
+  const idAttr = classes.includes('brand-icon-main') ? ' id="logo-icon"' : '';
+  return `<img${idAttr} src="${src}" alt="logo icon" class="${classes}"${keyAttr} />`;
 }

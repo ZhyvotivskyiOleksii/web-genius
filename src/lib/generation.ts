@@ -544,6 +544,40 @@ function resolveLanguage(prompt: string, websiteTypes: string[]): { name: string
   return detectLanguage(prompt);
 }
 
+function detectPreferredThemeMode(prompt: string): 'light' | 'dark' | undefined {
+  const text = (prompt || '').toLowerCase();
+  const lightHints = [
+    'light theme', 'light mode', 'bright', 'clean white', 'pastel', 'minimal light',
+    'sunny', 'airy', 'fresh', 'soft colors', 'white background', 'daylight',
+    'светлая тема', 'светлый стиль', 'светлый фон', 'светлая цветовая схема',
+    'білий фон', 'світла тема', 'світлий стиль'
+  ];
+  const darkHints = [
+    'dark theme', 'dark mode', 'midnight', 'neon', 'cyberpunk', 'night',
+    'moody', 'black background', 'deep dark', 'futuristic dark',
+    'тёмная тема', 'темный стиль', 'темный фон', 'темная цветовая схема',
+    'темна тема', 'темний стиль'
+  ];
+  if (lightHints.some((token) => text.includes(token))) return 'light';
+  if (darkHints.some((token) => text.includes(token))) return 'dark';
+  return undefined;
+}
+
+function parseLayoutPreferences(prompt: string): { includeHeader: boolean; includeFooter: boolean } {
+  const text = (prompt || '').toLowerCase();
+  const headerOff = [
+    'no header', 'without header', 'remove header', 'без хедера', 'без шапки',
+    'без header', 'без навигации', 'без навигації'
+  ];
+  const footerOff = [
+    'no footer', 'without footer', 'remove footer', 'без футера', 'без подвала',
+    'без footer'
+  ];
+  const includeHeader = !headerOff.some((token) => text.includes(token));
+  const includeFooter = !footerOff.some((token) => text.includes(token));
+  return { includeHeader, includeFooter };
+}
+
 export async function generateSingleSite(prompt: string, siteName: string, websiteTypes: string[] = [], history: string[] = []): Promise<Site | null> {
   try {
     const startedAt = Date.now();
@@ -551,7 +585,9 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const publicDir = path.join(process.cwd(), 'public');
     const sourceGamesDir = path.join(publicDir, 'games');
     const { name: languageName } = resolveLanguage(prompt, websiteTypes);
-    const brandTheme = chooseBrandingTheme({ websiteTypes });
+    const preferredMode = detectPreferredThemeMode(prompt);
+    const layoutPrefs = parseLayoutPreferences(prompt);
+    const brandTheme = chooseBrandingTheme({ websiteTypes, preferredMode });
     const brandVisual = inferBrandVisual(websiteTypes, prompt);
     const styleHints = createStyleHintPool(brandTheme.mode, isGameSite);
 
@@ -594,16 +630,29 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
     const desiredSections = getLocalizedSectionTemplates(languageName, siteName);
     const explicitSectionCount = extractRequestedSectionCount(prompt);
-    if (explicitSectionCount != null && structure.sections.length > explicitSectionCount) {
-      structure.sections = structure.sections.slice(0, explicitSectionCount);
-    }
-    const normalized = new Set(structure.sections.map(s => s.type.toLowerCase()));
-    const limit = explicitSectionCount ?? 8;
-    for (const section of desiredSections) {
-      if (structure.sections.length >= limit) break;
-      if (!normalized.has(section.type.toLowerCase())) {
-        structure.sections.push({ type: section.type, title: section.title, details: section.details });
-        normalized.add(section.type.toLowerCase());
+    if (explicitSectionCount != null) {
+      if (structure.sections.length > explicitSectionCount) {
+        structure.sections = structure.sections.slice(0, explicitSectionCount);
+      }
+      if (structure.sections.length < explicitSectionCount) {
+        const normalized = new Set(structure.sections.map(s => s.type.toLowerCase()));
+        for (const tpl of desiredSections) {
+          if (structure.sections.length >= explicitSectionCount) break;
+          if (!normalized.has(tpl.type.toLowerCase())) {
+            structure.sections.push({ type: tpl.type, title: tpl.title, details: tpl.details });
+            normalized.add(tpl.type.toLowerCase());
+          }
+        }
+      }
+    } else {
+      const normalized = new Set(structure.sections.map(s => s.type.toLowerCase()));
+      const limit = 8;
+      for (const section of desiredSections) {
+        if (structure.sections.length >= limit) break;
+        if (!normalized.has(section.type.toLowerCase())) {
+          structure.sections.push({ type: section.type, title: section.title, details: section.details });
+          normalized.add(section.type.toLowerCase());
+        }
       }
     }
     const mainSections = structure.sections.filter(s => !['terms', 'privacy', 'responsible-gaming'].includes(s.type));
@@ -764,7 +813,9 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         brandTheme,
         brandVisual,
         websiteTypes,
-        selectedFaviconPath
+        selectedFaviconPath,
+        layoutPrefs.includeHeader,
+        layoutPrefs.includeFooter
       );
 
       // Bundle the selected game's assets into the export so the iframe works offline.
@@ -781,8 +832,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
 
     // Add standard files
-    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, sortedNavAnchors, brandTheme, brandVisual, selectedFaviconPath);
-    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, normalizedDomain, policyContentHtml, sortedNavAnchors, brandTheme, brandVisual, websiteTypes, selectedFaviconPath);
+    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, sortedNavAnchors, brandTheme, brandVisual, selectedFaviconPath, layoutPrefs.includeHeader, layoutPrefs.includeFooter);
+    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, normalizedDomain, policyContentHtml, sortedNavAnchors, brandTheme, brandVisual, websiteTypes, selectedFaviconPath, layoutPrefs.includeHeader, layoutPrefs.includeFooter);
     files['scripts/main.js'] = mainJsTemplate;
     files['styles/style.css'] = stylesCssTemplate;
     
