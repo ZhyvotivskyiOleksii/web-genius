@@ -25,8 +25,10 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { getSupabase } from "@/lib/supabaseClient";
+import { loadDeployedSitesAction } from "@/app/actions";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { deriveDomainName, extractTypes, toExternalUrl } from "@/lib/domain";
 import {
   Archive,
   ChevronLeft,
@@ -39,7 +41,6 @@ import {
   Trash2,
   ExternalLink,
 } from "lucide-react";
-import { loadDeployedSitesAction } from "@/app/actions";
 
 const pageSize = 10;
 
@@ -52,126 +53,12 @@ type Row = {
   meta?: Record<string, any> | null;
 };
 
-type DeploymentRecord = {
+type DeployedRecord = {
   id: string;
-  domain: string | null;
+  domain: string;
   url?: string | null;
-  status?: string | null;
   created_at: string;
-};
-
-const normalizeDomainInput = (value?: string | null): string => {
-  if (!value) return '';
-  let cleaned = value.trim();
-  cleaned = cleaned.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-  return cleaned.toLowerCase();
-};
-
-const extractTypes = (meta?: Record<string, any> | null): string[] => {
-  if (!meta) return [];
-  const raw = meta.types ?? meta.siteTypes ?? meta.site_types;
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === 'string') return raw.split(/[,;]+/).map((t: string) => t.trim()).filter(Boolean);
-  return [];
-};
-
-const inferTld = (types: string[]): string => {
-  const joined = types.join(' ').toLowerCase();
-  if (joined.includes('sport') && joined.includes('poland')) return '.pl';
-  return '.com';
-};
-
-const slugifyBase = (value?: string): string => {
-  if (!value) return '';
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-};
-
-const deriveDomain = (meta: Record<string, any> | null | undefined, fallbackSlug?: string, fallbackName?: string): string => {
-  const candidate = normalizeDomainInput(
-    typeof meta?.domain === 'string'
-      ? meta.domain
-      : typeof meta?.customDomain === 'string'
-      ? meta.customDomain
-      : undefined
-  );
-  const types = extractTypes(meta);
-  const candidateTld = (() => {
-    if (!candidate) return undefined;
-    const match = candidate.match(/\.([a-z]{2,})$/i);
-    return match ? `.${match[1].toLowerCase()}` : undefined;
-  })();
-  const ensureTld = (base: string, preferredTld?: string): string => {
-    if (!base) return '';
-    let next = base.trim().toLowerCase();
-    next = next.replace(/^https?:\/\//, '').replace(/\/.*/, '');
-    next = next.replace(/^www\./, '');
-    next = next.replace(/[^a-z0-9.-]/g, '-');
-    next = next.replace(/-{2,}/g, '-');
-    next = next.replace(/^-+|-+$/g, '');
-    next = next.replace(/\.\.+/g, '.').replace(/\.$/, '');
-    const normalizedPreferred = preferredTld
-      ? (preferredTld.startsWith('.') ? preferredTld : `.${preferredTld}`)
-      : '';
-    const fallbackSuffix = normalizedPreferred || inferTld(types);
-    if (!next.includes('.')) {
-      if (next.endsWith('com') && next.length > 3) {
-        const prefix = next.slice(0, -3);
-        if (prefix.includes('-')) {
-          const trimmed = prefix.replace(/[-_.]+$/g, '');
-          next = trimmed ? `${trimmed}.com` : `site${fallbackSuffix}`;
-        } else {
-          next = `${next}.com`;
-        }
-      } else if (next.endsWith('pl') && next.length > 2) {
-        const prefix = next.slice(0, -2);
-        if (prefix.includes('-')) {
-          const trimmed = prefix.replace(/[-_.]+$/g, '');
-          next = trimmed ? `${trimmed}.pl` : `site${fallbackSuffix}`;
-        } else {
-          next = `${next}.pl`;
-        }
-      } else {
-        next = `${next}${fallbackSuffix}`;
-      }
-    }
-    if (!next.includes('.')) {
-      next = `${next}${fallbackSuffix}`;
-    }
-    next = next.replace(/\.\.+/g, '.').replace(/\.$/, '');
-    if (normalizedPreferred && !next.endsWith(normalizedPreferred)) {
-      const withoutSuffix = next.replace(/\.[^.]+$/, '');
-      next = `${withoutSuffix}${normalizedPreferred}`;
-    }
-    return next;
-  };
-  const hasDuplicateSuffix = (value: string): boolean => {
-    const match = value.match(/^(.+)\.(com|pl)$/i);
-    if (!match) return false;
-    const [, before, tld] = match;
-    return before.endsWith(tld);
-  };
-  const fallbackBase = slugifyBase(fallbackSlug) || slugifyBase(fallbackName);
-  const fallbackDomain = fallbackBase ? ensureTld(fallbackBase, candidateTld) : '';
-  if (candidate) {
-    const candidateDomain = ensureTld(candidate, candidateTld);
-    if (hasDuplicateSuffix(candidateDomain) && fallbackDomain && fallbackDomain !== candidateDomain) {
-      return fallbackDomain;
-    }
-    return candidateDomain;
-  }
-  if (fallbackDomain) {
-    return fallbackDomain;
-  }
-  return ensureTld('demo-site', candidateTld);
-};
-
-const toExternalUrl = (domain: string): string => {
-  if (!domain) return '#';
-  return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
+  status?: string | null;
 };
 
 type StatusPresetKey = "all" | "work" | "deploy" | "cloaking" | "archived";
@@ -179,7 +66,7 @@ type StatusPresetKey = "all" | "work" | "deploy" | "cloaking" | "archived";
 const statusPresets: { key: StatusPresetKey; label: string; matches: string[] | null }[] = [
   { key: "all", label: "All", matches: null },
   { key: "work", label: "In Progress", matches: ["draft", "work", "in_progress", "pending", "edit"] },
-  { key: "deploy", label: "Deploy", matches: ["deploy", "published", "live", "production"] },
+  { key: "deploy", label: "Deployed", matches: ["deploy", "published", "live", "production"] },
   { key: "cloaking", label: "Cloaking", matches: ["cloak", "cloaking", "stealth"] },
   { key: "archived", label: "Archived", matches: ["archive", "archived"] },
 ];
@@ -196,7 +83,7 @@ const statusStyles: Record<StatusPresetKey, { label: string; badgeClass: string;
     icon: <Wrench className="h-3.5 w-3.5" />,
   },
   deploy: {
-    label: "Deploy",
+    label: "Deployed",
     badgeClass: "border-emerald-500/30 bg-emerald-500/15 text-emerald-200",
     icon: <Rocket className="h-3.5 w-3.5" />,
   },
@@ -210,6 +97,19 @@ const statusStyles: Record<StatusPresetKey, { label: string; badgeClass: string;
     badgeClass: "border-rose-500/30 bg-rose-500/15 text-rose-200",
     icon: <Archive className="h-3.5 w-3.5" />,
   },
+};
+
+const getProjectDomain = (row: Row): string => {
+  const meta = row.meta || null;
+  return deriveDomainName(
+    {
+      domain: typeof meta?.domain === "string" ? meta.domain : undefined,
+      customDomain: typeof meta?.customDomain === "string" ? meta.customDomain : undefined,
+      types: extractTypes(meta),
+    },
+    row.slug,
+    row.name,
+  );
 };
 
 function resolvePreset(row: Row): StatusPresetKey {
@@ -232,46 +132,66 @@ export default function MySitesPage() {
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
   const [deletePending, setDeletePending] = useState(false);
-  const [deployments, setDeployments] = useState<DeploymentRecord[]>([]);
+  const [deployments, setDeployments] = useState<DeployedRecord[]>([]);
   const [deployError, setDeployError] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      const sb = await getSupabase();
+      if (!sb) {
+        setUserId(null);
+        setLoading(false);
+        return;
+      }
+      const { data: auth } = await sb.auth.getUser();
+      const uid = auth.user?.id || null;
+      setUserId(uid);
+      if (!uid) {
+        setRows([]);
+        setDeployments([]);
+        setDeployError(null);
+        setError(null);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
       try {
-        const sb = await getSupabase();
-        if (!sb) throw new Error("Supabase not configured");
-        const { data: auth } = await sb.auth.getUser();
-        if (!auth.user?.id) {
-          setError("Sign in to access your projects.");
-          setLoading(false);
-          return;
-        }
         const { data, error } = await sb
           .from("sites")
           .select("id,name,slug,updated_at,status,meta")
-          .eq("user_id", auth.user.id)
+          .eq("user_id", uid)
           .order("updated_at", { ascending: false });
         if (error) throw error;
-        setRows(((data || []) as Row[]).map((row) => ({ ...row, meta: row.meta || null })));
+        if (!cancelled) {
+          setRows(((data || []) as Row[]).map((row) => ({ ...row, meta: row.meta || null })));
+        }
 
-        const deployRes = await loadDeployedSitesAction(auth.user.id);
-        if (deployRes.success && Array.isArray(deployRes.sites)) {
-          setDeployments(deployRes.sites as DeploymentRecord[]);
-          setDeployError(null);
-        } else {
-          setDeployments([]);
-          setDeployError(deployRes.error || null);
+        const deployed = await loadDeployedSitesAction(uid);
+        if (!cancelled) {
+          if (deployed.success && Array.isArray(deployed.sites)) {
+            setDeployments(deployed.sites as DeployedRecord[]);
+            setDeployError(null);
+          } else if (deployed.error) {
+            setDeployments([]);
+            setDeployError(deployed.error);
+          }
         }
       } catch (e: any) {
-        setError(e?.message || "Failed to load projects.");
-        setDeployments([]);
-        setDeployError(null);
+        if (!cancelled) {
+          setError(e?.message || "Failed to load projects.");
+          setDeployError((prev) => prev ?? (e?.message || null));
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   useEffect(() => {
     setPage(1);
@@ -282,7 +202,7 @@ export default function MySitesPage() {
     const clone = [...rows];
     switch (sort) {
       case "name":
-        return clone.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+        return clone.sort((a, b) => a.name.localeCompare(b.name, "en"));
       case "status":
         return clone.sort((a, b) => resolvePreset(a).localeCompare(resolvePreset(b)));
       case "recent":
@@ -308,7 +228,7 @@ export default function MySitesPage() {
       return (
         row.name.toLowerCase().includes(query) ||
         row.slug.toLowerCase().includes(query) ||
-        (row.meta?.domain ? String(row.meta.domain).toLowerCase().includes(query) : false)
+        getProjectDomain(row).toLowerCase().includes(query)
       );
     });
   }, [sortedRows, activePreset, search]);
@@ -320,6 +240,21 @@ export default function MySitesPage() {
   useEffect(() => {
     if (page !== currentPage) setPage(currentPage);
   }, [currentPage, page]);
+
+  const {
+    totalProjects,
+    inProgressCount,
+    deployedProjectsCount,
+    cloakingCount,
+    archivedCount,
+  } = useMemo(() => {
+    const inProgress = rows.filter((row) => resolvePreset(row) === "work").length;
+    const deployed = rows.filter((row) => resolvePreset(row) === "deploy").length;
+    const cloaking = rows.filter((row) => resolvePreset(row) === "cloaking").length;
+    const archived = rows.filter((row) => resolvePreset(row) === "archived").length;
+    return { totalProjects: rows.length, inProgressCount: inProgress, deployedProjectsCount: deployed, cloakingCount: cloaking, archivedCount: archived };
+  }, [rows]);
+
 
   const handleDelete = async () => {
     if (!deleteTarget) return;
@@ -334,9 +269,9 @@ export default function MySitesPage() {
       const { error } = await sb.from("sites").delete().eq("id", siteId).eq("user_id", auth.user.id);
       if (error) throw error;
       setRows((prev) => prev.filter((row) => row.id !== siteId));
-      toast({ title: "Project removed", description: `“${deleteTarget.name}” was moved to the archive.` });
+      toast({ title: "Project removed", description: `“${deleteTarget.name}” has been moved to the archive.` });
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Failed", description: e?.message || "Could not delete project." });
+      toast({ variant: "destructive", title: "Could not delete", description: e?.message || "Deletion failed." });
     } finally {
       setDeletePending(false);
       setDeleteTarget(null);
@@ -357,39 +292,38 @@ export default function MySitesPage() {
   return (
     <main className="min-h-screen bg-[#06070c] text-slate-100">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 pb-16 pt-12">
-        <div className="relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-8 shadow-xl">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_55%)]" />
+        <div className="panel-glow p-8 sm:p-10">
           <div className="relative flex flex-col gap-8">
             <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
               <div className="space-y-1">
                 <p className="text-sm uppercase tracking-[0.35em] text-sky-400/70">My Projects</p>
-                <h1 className="text-3xl font-semibold text-white sm:text-4xl">Site Operations Control</h1>
-                <p className="text-sm text-slate-400">Filter, deploy, and manage cloaked versions from one place.</p>
+                <h1 className="text-3xl font-semibold text-white sm:text-4xl">Website Control Center</h1>
+                <p className="text-sm text-slate-400">Filter, manage deployments, and monitor hidden versions from one place.</p>
               </div>
               <Link href="/">
                 <Button variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" size="sm">
-                  Back to Generator
+                  Back to Home
                 </Button>
               </Link>
             </div>
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center">
+            <div className="control-surface flex flex-col gap-4 border border-white/10 bg-white/[0.02] p-4 md:flex-row md:items-center">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <Input
                   placeholder="Search by name, domain, or slug"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  className="h-12 rounded-2xl border-white/10 bg-white/[0.03] pl-11 text-base text-white placeholder:text-slate-500 focus-visible:border-sky-500/60 focus-visible:ring-sky-500/40"
+                  className="h-12 rounded-2xl border-white/10 bg-transparent pl-11 text-base text-white placeholder:text-slate-500 focus-visible:border-sky-500/60 focus-visible:ring-sky-500/40"
                 />
               </div>
               <div className="flex w-full gap-3 sm:w-auto">
                 <Select value={sort} onValueChange={(value) => setSort(value as typeof sort)}>
-                  <SelectTrigger className="h-12 w-full rounded-2xl border-white/10 bg-white/[0.03] text-white sm:w-48">
-                    <SelectValue placeholder="Sort" />
+                  <SelectTrigger className="h-12 w-full rounded-2xl border-white/10 bg-transparent text-white sm:w-48">
+                    <SelectValue placeholder="Sort by" />
                   </SelectTrigger>
                   <SelectContent className="border-white/10 bg-[#0f172a] text-slate-100">
-                    <SelectItem value="recent">Latest updates</SelectItem>
+                    <SelectItem value="recent">Recently updated</SelectItem>
                     <SelectItem value="name">Alphabetical</SelectItem>
                     <SelectItem value="status">By status</SelectItem>
                   </SelectContent>
@@ -398,12 +332,12 @@ export default function MySitesPage() {
             </div>
 
             <Tabs value={activePreset} onValueChange={(value) => setActivePreset(value as StatusPresetKey)}>
-              <TabsList className="flex flex-wrap gap-2 rounded-full bg-transparent p-1 border border-transparent">
+              <TabsList className="control-surface grid grid-cols-2 gap-2 border border-white/10 bg-white/[0.02] p-2 sm:flex sm:flex-wrap">
                 {statusPresets.map((preset) => (
                   <TabsTrigger
                     key={preset.key}
                     value={preset.key}
-                    className="group relative flex flex-1 items-center justify-center gap-2 rounded-full border border-transparent px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-white/[0.08] data-[state=active]:border-sky-400/70 data-[state=active]:bg-sky-400/15 data-[state=active]:text-white sm:flex-none"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-200 transition data-[state=active]:border-sky-400/60 data-[state=active]:bg-sky-400/15 data-[state=active]:text-white"
                   >
                     {statusStyles[preset.key].icon}
                     <span>{statusStyles[preset.key].label}</span>
@@ -411,6 +345,37 @@ export default function MySitesPage() {
                 ))}
               </TabsList>
             </Tabs>
+
+            {loading ? (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="stat-chip h-[88px] animate-pulse bg-white/5" />
+                ))}
+              </div>
+            ) : (
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="stat-chip">
+                  <span className="text-[0.65rem] uppercase tracking-[0.35em] text-slate-500">Total projects</span>
+                  <strong className="text-white">{totalProjects}</strong>
+                  <p className="text-xs text-slate-400">{inProgressCount} in progress • {deployedProjectsCount} deployed</p>
+                </div>
+                <div className="stat-chip">
+                  <span className="text-[0.65rem] uppercase tracking-[0.35em] text-slate-500">Deployments</span>
+                  <strong className="text-white">{deployments.filter(d => d.status === 'succeeded').length}</strong>
+                  <p className="text-xs text-slate-400">{deployments.length > 0 ? `Last: ${new Date(deployments[0].created_at).toLocaleDateString()}` : "Publish to see history"}</p>
+                </div>
+                <div className="stat-chip">
+                  <span className="text-[0.65rem] uppercase tracking-[0.35em] text-slate-500">Special flows</span>
+                  <strong className="text-white">{cloakingCount + archivedCount}</strong>
+                  <p className="text-xs text-slate-400">{cloakingCount} cloaking • {archivedCount} archived</p>
+                </div>
+                <div className="stat-chip">
+                  <span className="text-[0.65rem] uppercase tracking-[0.35em] text-slate-500">Current view</span>
+                  <strong className="text-white">{filteredRows.length}</strong>
+                  <p className="text-xs text-slate-400">{activePreset === "all" ? "All categories" : statusStyles[activePreset].label}</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -421,64 +386,59 @@ export default function MySitesPage() {
             </div>
           ) : error ? (
             <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-6 text-sm text-rose-200">{error}</div>
-          ) : paginatedRows.length === 0 ? (
-            <Card className="mx-auto flex max-w-3xl flex-col items-center justify-center gap-3 rounded-3xl border border-white/5 bg-white/[0.02] px-10 py-12 text-center text-slate-300 shadow-[0_25px_55px_rgba(4,12,29,0.35)]">
+          ) : paginatedRows.length === 0 && !(activePreset === "deploy" && deployments.length > 0) ? (
+            <Card className="flex flex-col items-center justify-center gap-3 rounded-3xl border border-white/10 bg-white/[0.03] p-12 text-center text-slate-400">
               <Rocket className="h-8 w-8 text-sky-400" />
-              <p className="text-lg font-medium text-white">No projects found</p>
-              <p className="max-w-md text-sm text-slate-400">Adjust the filters or start a new project to bring this feed to life.</p>
+              <p className="text-lg font-medium text-white">Nothing found</p>
+              <p className="max-w-md text-sm text-slate-400">Try adjusting the filters or create a new project to bring this feed to life.</p>
             </Card>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {paginatedRows.map((row) => {
-                const domain = deriveDomain(row.meta ?? null, row.slug, row.name);
-                const liveUrl = domain ? toExternalUrl(domain) : null;
+                const domain = getProjectDomain(row);
                 return (
-                  <div
-                    key={row.id}
-                    className="group relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-6 shadow-lg transition-transform duration-200 hover:-translate-y-1 hover:border-sky-400/50 hover:shadow-2xl"
-                  >
-                    <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:[background:radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_55%)]" />
-                    <div className="relative flex flex-col gap-6">
-                      <div className="flex items-start justify-between gap-3">
+                  <div key={row.id} className="card-veil p-6 md:p-7">
+                    <div className="flex flex-col gap-6">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="space-y-2">
                           <h2 className="text-xl font-semibold text-white line-clamp-1">{row.name}</h2>
-                          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{row.slug}</p>
+                          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">{row.slug}</p>
                         </div>
                         {renderStatus(row)}
                       </div>
 
-                      <div className="space-y-2 text-sm text-slate-300">
-                        <div className="flex items-center justify-between text-xs text-slate-400">
-                          <span>Updated</span>
-                          <span>{new Date(row.updated_at).toLocaleString()}</span>
+                      <div className="grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
+                        <div className="space-y-1 text-xs text-slate-400">
+                          <span className="text-slate-500">Updated</span>
+                          <p className="text-slate-200">{new Date(row.updated_at).toLocaleString()}</p>
                         </div>
-                        {domain ? (
-                          <div className="flex items-center justify-between text-xs text-slate-400">
-                            <span>Domain</span>
-                            <span className="truncate text-slate-200">{domain}</span>
-                          </div>
-                        ) : null}
+                        <div className="space-y-1 text-xs text-slate-400">
+                          <span className="text-slate-500">Domain</span>
+                          <p className="truncate text-slate-200">{domain}</p>
+                        </div>
                       </div>
 
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex gap-2">
                           <Link href={`/editor/${row.id}`}>
-                            <Button className="rounded-xl bg-sky-500/90 px-4 text-sm font-medium text-white shadow-sm transition hover:bg-sky-400" size="sm">
+                            <Button className="rounded-full bg-sky-500/90 px-5 py-2 text-sm font-medium text-white shadow-[0_12px_32px_rgba(59,130,246,0.35)] transition hover:bg-sky-400/90" size="sm">
                               Open
                             </Button>
                           </Link>
-                          {liveUrl ? (
-                            <Link href={liveUrl} target="_blank">
-                              <Button variant="ghost" className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white" size="sm">
-                                <ExternalLink className="mr-1 h-4 w-4" />
-                                View live
-                              </Button>
-                            </Link>
-                          ) : null}
+                          <Link href={toExternalUrl(domain)} target="_blank">
+                            <Button
+                              variant="ghost"
+                              className="rounded-full border border-white/10 bg-white/5 px-4 text-xs font-medium text-slate-200 hover:border-sky-400/50 hover:text-white"
+                              size="sm"
+                            >
+                              <ExternalLink className="mr-1 h-4 w-4" />
+                              Live site
+                            </Button>
+                          </Link>
                         </div>
                         <Button
                           variant="ghost"
-                          className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-rose-200 hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
+                          className="rounded-full border border-white/10 bg-white/5 px-4 text-xs font-medium text-rose-200 hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
                           size="sm"
                           onClick={() => setDeleteTarget(row)}
                         >
@@ -492,12 +452,13 @@ export default function MySitesPage() {
               })}
             </div>
           )}
+
           {!loading && activePreset === "deploy" ? (
-            <div className="panel-glow mx-auto max-w-5xl p-6 sm:p-7">
+            <div className="panel-glow p-6 sm:p-7">
               <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <h3 className="text-base font-semibold text-white">Deployed sites</h3>
-                  <p className="text-xs text-slate-400">Active deployments, domains, and connection history.</p>
+                    <p className="text-xs text-slate-400">Active deployments, domains, and connection history.</p> 
                 </div>
                   <div className="text-xs text-slate-500">{deployments.filter(d => d.status === 'succeeded').length} successful</div>
               </div>
@@ -514,7 +475,7 @@ export default function MySitesPage() {
                       <div key={deploy.id} className="card-veil flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="space-y-1">
                           <a
-                            href={deploy.url || `https://${deploy.domain}`}
+                            href={deploy.url || toExternalUrl(deploy.domain)}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-base font-semibold text-white hover:text-sky-300"
@@ -528,7 +489,7 @@ export default function MySitesPage() {
                         <div className="flex items-center gap-3">
                           <span className={pillClass}>{deployStatus}</span>
                           <Button asChild variant="ghost" className="rounded-full border border-white/10 bg-white/5 px-4 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white" size="sm">
-                            <a href={deploy.url || `https://${deploy.domain}`} target="_blank" rel="noopener noreferrer">
+                            <a href={deploy.url || toExternalUrl(deploy.domain)} target="_blank" rel="noopener noreferrer">
                               <ExternalLink className="mr-1 h-4 w-4" /> View site
                             </a>
                           </Button>
@@ -540,28 +501,29 @@ export default function MySitesPage() {
               )}
             </div>
           ) : null}
+
           {!loading && !error && filteredRows.length > 0 ? (
             <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-xs text-slate-400 sm:flex-row">
               <div>
                 Page {currentPage} of {totalPages} • {filteredRows.length} projects
               </div>
-                <div className="flex items-center gap-2 text-slate-300">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-xl border border-white/10 bg-transparent px-3 text-xs hover:border-sky-400/50 hover:text-white"
-                    onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                  >
-                  <ChevronLeft className="mr-1 h-4 w-4" />Prev
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="rounded-xl border border-white/10 bg-transparent px-3 text-xs hover:border-sky-400/50 hover:text-white"
-                    onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                  >
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                  onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />Previous
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                  onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={currentPage === totalPages}
+                >
                   Next<ChevronRight className="ml-1 h-4 w-4" />
                 </Button>
               </div>
@@ -581,9 +543,9 @@ export default function MySitesPage() {
       >
         <AlertDialogContent className="border-white/10 bg-[#0b1120] text-slate-100">
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete project?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this project?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action permanently removes “{deleteTarget?.name}” and its files. It cannot be undone.
+              This action permanently removes “{deleteTarget?.name}” and its files. You won’t be able to undo it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

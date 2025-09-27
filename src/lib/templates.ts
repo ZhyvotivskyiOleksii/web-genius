@@ -30,6 +30,30 @@ export type BrandVisual = {
   secondaryIcon?: string;
 };
 
+const casinoIconPool = ['dice', 'chip', 'crown', 'gamepad', 'trophy', 'gem', 'spark', 'spade', 'club', 'diamond'];
+const sportIconPool = ['trophy', 'medal', 'flag', 'rocket', 'shield', 'flare'];
+const loungeIconPool = ['palm', 'wave', 'sun', 'spark'];
+
+export function inferBrandVisual(websiteTypes: string[] = [], prompt: string = ''): BrandVisual {
+  const typesJoined = websiteTypes.map((type) => type.toLowerCase()).join(' ');
+  const promptLower = prompt.toLowerCase();
+  let pool = casinoIconPool;
+  if (typesJoined.includes('sport') || promptLower.includes('sport')) {
+    pool = sportIconPool;
+  } else if (typesJoined.includes('bar') || typesJoined.includes('lounge')) {
+    pool = loungeIconPool.concat(casinoIconPool);
+  }
+  if (!pool.length) {
+    pool = casinoIconPool;
+  }
+  const primary = pool[Math.floor(Math.random() * pool.length)] || 'star';
+  const secondaryCandidates = pool.filter((icon) => icon !== primary);
+  const secondary = secondaryCandidates.length && Math.random() > 0.55
+    ? secondaryCandidates[Math.floor(Math.random() * secondaryCandidates.length)]
+    : undefined;
+  return { primaryIcon: primary, secondaryIcon: secondary };
+}
+
 const defaultBrandVisual: BrandVisual = {
   primaryIcon: 'star',
   secondaryIcon: 'spark',
@@ -60,8 +84,154 @@ const fallbackTheme: BrandingTheme = {
   styleBlock: '.brand-title { background: linear-gradient(90deg,#7f5af0,#5a31f0,#0ea5e9); -webkit-background-clip: text; color: transparent; background-clip: text; }',
 };
 
+const auroraDarkTheme: BrandingTheme = {
+  id: 'aurora-dark',
+  mode: 'dark',
+  bodyClass: 'font-sans text-slate-100 bg-gradient-to-br from-[#040511] via-[#0e1326] to-[#30145d]',
+  headerClass: 'bg-black/60 backdrop-blur-lg border-b border-white/10',
+  navLinkClass: 'text-slate-300 hover:bg-white/10 hover:text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+  navActiveClass: 'text-white bg-white/15 shadow-sm',
+  menuToggleClass: 'p-2 inline-flex items-center justify-center rounded-md text-slate-300 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-400',
+  mobileNavClass: 'mobile-nav-base mobile-nav-hidden bg-gradient-to-b from-[#0b0f1e]/95 via-[#14092d]/95 to-[#1f0a3d]/95 text-slate-200',
+  mobileNavLinkClass: 'text-slate-200 hover:text-white text-3xl font-bold tracking-tight',
+  mobileNavActiveClass: 'text-white',
+  gameLinkClass: 'text-purple-300 font-semibold hover:bg-white/12 hover:text-white px-3 py-2 rounded-lg text-sm transition-colors',
+  gameActiveClass: 'ring-2 ring-purple-300/70 ring-offset-2 ring-offset-[#0b0f1e]',
+  mobileGameLinkClass: 'text-purple-200 hover:text-white text-3xl font-bold',
+  mobileGameActiveClass: 'text-white',
+  footerClass: 'bg-black/60 border-t border-white/10',
+  footerTextClass: 'text-slate-400',
+  cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-[#0b0f1e]/90 backdrop-blur-lg p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-white/10',
+  cookieTextClass: 'text-sm text-slate-200',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#a855f7] to-[#6366f1] text-white hover:brightness-110 transition',
+  brandBadgeClass: 'bg-white/10 text-white shadow-[0_6px_18px_rgba(124,58,237,0.35)]',
+  logoGradient: 'linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #22d3ee 100%)',
+  styleBlock: '.brand-title { background: linear-gradient(135deg,#c084fc,#818cf8,#22d3ee); -webkit-background-clip: text; color: transparent; background-clip: text; }',
+};
+
+const cyberDarkTheme: BrandingTheme = {
+  id: 'cyber-dark',
+  mode: 'dark',
+  bodyClass: 'font-sans text-slate-100 bg-gradient-to-br from-[#05080f] via-[#0d1b2a] to-[#011627]',
+  headerClass: 'bg-slate-950/70 backdrop-blur-lg border-b border-cyan-400/30',
+  navLinkClass: 'text-slate-300 hover:bg-cyan-500/10 hover:text-cyan-200 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+  navActiveClass: 'text-cyan-100 bg-cyan-500/20 shadow-inner',
+  menuToggleClass: 'p-2 inline-flex items-center justify-center rounded-md text-cyan-200 hover:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400',
+  mobileNavClass: 'mobile-nav-base mobile-nav-hidden bg-[#03111f]/95 text-slate-200',
+  mobileNavLinkClass: 'text-cyan-200 hover:text-white text-3xl font-bold tracking-tight',
+  mobileNavActiveClass: 'text-white',
+  gameLinkClass: 'text-cyan-300 font-semibold hover:bg-cyan-500/15 hover:text-white px-3 py-2 rounded-lg text-sm transition-colors',
+  gameActiveClass: 'ring-2 ring-cyan-300/70 ring-offset-2 ring-offset-[#03111f]',
+  mobileGameLinkClass: 'text-cyan-200 hover:text-white text-3xl font-bold',
+  mobileGameActiveClass: 'text-white',
+  footerClass: 'bg-slate-950/70 border-t border-cyan-400/10',
+  footerTextClass: 'text-slate-400',
+  cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-[#03111f]/90 backdrop-blur-xl p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-cyan-400/20',
+  cookieTextClass: 'text-sm text-slate-200',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#06b6d4] to-[#3b82f6] text-white hover:brightness-110 transition',
+  brandBadgeClass: 'bg-cyan-500/20 text-white shadow-[0_6px_18px_rgba(6,182,212,0.45)]',
+  logoGradient: 'linear-gradient(135deg, #67e8f9 0%, #38bdf8 50%, #818cf8 100%)',
+  styleBlock: '.brand-title { background: linear-gradient(135deg,#67e8f9,#38bdf8,#818cf8); -webkit-background-clip: text; color: transparent; background-clip: text; }',
+};
+
+const sunriseLightTheme: BrandingTheme = {
+  id: 'sunrise-light',
+  mode: 'light',
+  bodyClass: 'font-sans text-slate-800 bg-gradient-to-br from-[#fff9f1] via-[#fff5fb] to-[#f0f9ff]',
+  headerClass: 'bg-white/80 backdrop-blur-xl border-b border-slate-200',
+  navLinkClass: 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+  navActiveClass: 'text-slate-900 bg-white shadow-sm',
+  menuToggleClass: 'p-2 inline-flex items-center justify-center rounded-md text-slate-500 hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400',
+  mobileNavClass: 'mobile-nav-base mobile-nav-hidden bg-white/95 text-slate-800',
+  mobileNavLinkClass: 'text-slate-700 hover:text-slate-900 text-3xl font-bold',
+  mobileNavActiveClass: 'text-slate-900',
+  gameLinkClass: 'text-amber-600 font-semibold hover:bg-amber-100 hover:text-amber-700 px-3 py-2 rounded-lg text-sm transition-colors',
+  gameActiveClass: 'ring-2 ring-amber-300/80 ring-offset-2 ring-offset-white',
+  mobileGameLinkClass: 'text-amber-500 hover:text-amber-700 text-3xl font-bold',
+  mobileGameActiveClass: 'text-amber-700',
+  footerClass: 'bg-white/80 border-t border-slate-200',
+  footerTextClass: 'text-slate-500',
+  cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-amber-200',
+  cookieTextClass: 'text-sm text-slate-600',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#f97316] to-[#facc15] text-white shadow hover:brightness-110 transition',
+  brandBadgeClass: 'bg-gradient-to-br from-white to-amber-100 text-amber-600 shadow-[0_8px_20px_rgba(249,115,22,0.25)]',
+  logoGradient: 'linear-gradient(120deg, #f97316 0%, #facc15 45%, #f472b6 100%)',
+  styleBlock: '.brand-title { background: linear-gradient(120deg,#f97316,#facc15,#f472b6); -webkit-background-clip: text; color: transparent; background-clip: text; }',
+};
+
+const coastalLightTheme: BrandingTheme = {
+  id: 'coastal-light',
+  mode: 'light',
+  bodyClass: 'font-sans text-slate-800 bg-gradient-to-br from-[#f4fbff] via-[#fefefe] to-[#fff5f5]',
+  headerClass: 'bg-white/85 backdrop-blur-xl border-b border-slate-200',
+  navLinkClass: 'text-slate-600 hover:bg-blue-100/60 hover:text-blue-700 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+  navActiveClass: 'text-blue-700 bg-blue-100',
+  menuToggleClass: 'p-2 inline-flex items-center justify-center rounded-md text-blue-500 hover:text-blue-700 focus-visible:ring-2 focus-visible:ring-blue-400',
+  mobileNavClass: 'mobile-nav-base mobile-nav-hidden bg-white/95 text-slate-800',
+  mobileNavLinkClass: 'text-blue-600 hover:text-blue-800 text-3xl font-bold',
+  mobileNavActiveClass: 'text-blue-800',
+  gameLinkClass: 'text-rose-500 font-semibold hover:bg-rose-100 hover:text-rose-600 px-3 py-2 rounded-lg text-sm transition-colors',
+  gameActiveClass: 'ring-2 ring-rose-300/80 ring-offset-2 ring-offset-white',
+  mobileGameLinkClass: 'text-rose-500 hover:text-rose-600 text-3xl font-bold',
+  mobileGameActiveClass: 'text-rose-600',
+  footerClass: 'bg-white/80 border-t border-slate-200',
+  footerTextClass: 'text-slate-500',
+  cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-white/92 backdrop-blur-lg p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-blue-200',
+  cookieTextClass: 'text-sm text-slate-600',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#38bdf8] to-[#22d3ee] text-white hover:brightness-110 transition',
+  brandBadgeClass: 'bg-gradient-to-br from-blue-100 to-white text-blue-700 shadow-[0_8px_20px_rgba(56,189,248,0.25)]',
+  logoGradient: 'linear-gradient(120deg, #38bdf8 0%, #22d3ee 50%, #fda4af 100%)',
+  styleBlock: '.brand-title { background: linear-gradient(120deg,#38bdf8,#22d3ee,#fda4af); -webkit-background-clip: text; color: transparent; background-clip: text; }',
+};
+
+const brandingThemes: BrandingTheme[] = [
+  fallbackTheme,
+  auroraDarkTheme,
+  cyberDarkTheme,
+  sunriseLightTheme,
+  coastalLightTheme,
+];
+
+type ThemeOptions = {
+  preferredMode?: 'light' | 'dark';
+  websiteTypes?: string[];
+};
+
+const cloneTheme = (theme: BrandingTheme): BrandingTheme => JSON.parse(JSON.stringify(theme));
+
+export function chooseBrandingTheme(options: ThemeOptions = {}): BrandingTheme {
+  const { preferredMode, websiteTypes = [] } = options;
+  const normalizedTypes = websiteTypes.map((type) => type.toLowerCase());
+  const isSport = normalizedTypes.some((type) => type.includes('sport'));
+  const isGame = normalizedTypes.some((type) => type.includes('game'));
+
+  let pool = brandingThemes.filter((theme) => !preferredMode || theme.mode === preferredMode);
+  if (!pool.length) {
+    pool = brandingThemes;
+  }
+
+  if (isSport) {
+    const lightThemes = pool.filter((theme) => theme.mode === 'light');
+    if (lightThemes.length && Math.random() < 0.8) {
+      pool = lightThemes;
+    }
+  } else if (isGame && !preferredMode) {
+    const darkThemes = pool.filter((theme) => theme.mode === 'dark');
+    const lightThemes = pool.filter((theme) => theme.mode === 'light');
+    const chooseDark = Math.random() < 0.65;
+    if (chooseDark && darkThemes.length) {
+      pool = darkThemes;
+    } else if (!chooseDark && lightThemes.length) {
+      pool = lightThemes;
+    }
+  }
+
+  const picked = pool[Math.floor(Math.random() * pool.length)] || fallbackTheme;
+  return cloneTheme(picked);
+}
+
 function resolveTheme(theme?: BrandingTheme): BrandingTheme {
-  return theme ?? fallbackTheme;
+  return cloneTheme(theme ?? fallbackTheme);
 }
 
 function resolveBrandVisual(visual?: BrandVisual): BrandVisual {

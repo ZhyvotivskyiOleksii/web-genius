@@ -8,7 +8,16 @@ import { generatePolicyContent, PolicyContent } from '@/ai/flows/generate-policy
 import { marked } from 'marked';
 import { generateSiteStructure, SiteStructure } from '@/ai/flows/generate-site-structure';
 import { generateHtmlForSection } from '@/ai/flows/generate-html-for-section';
-import { getIndexHtmlTemplate, getGamePageTemplate, getPrivacyPolicyTemplate, mainJsTemplate, stylesCssTemplate } from '@/lib/templates';
+import {
+  getIndexHtmlTemplate,
+  getGamePageTemplate,
+  getPrivacyPolicyTemplate,
+  mainJsTemplate,
+  stylesCssTemplate,
+  chooseBrandingTheme,
+  inferBrandVisual,
+} from '@/lib/templates';
+import { deriveDomainName } from '@/lib/domain';
 import manifest from '@/lib/asset-manifest.json';
 
 function detectLanguage(prompt: string): { name: string; iso: string } {
@@ -98,6 +107,54 @@ function getLocalizedSectionTemplates(language: string, siteName: string) {
     ],
   };
   return templates[language] || templates.English;
+}
+
+function shuffleArray<T>(items: T[]): T[] {
+  const clone = [...items];
+  for (let i = clone.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [clone[i], clone[j]] = [clone[j], clone[i]];
+  }
+  return clone;
+}
+
+function createStyleHintPool(themeMode: 'light' | 'dark', isGameSite: boolean): string[] {
+  const shared = [
+    'Layer rich parallax background images with subtle depth and add floating chips moving at different speeds',
+    'Use organic gradients and animated radial glows behind the content blocks with CSS motion blur',
+    'Compose a split layout with diagonal glass panels, soft drop shadows and animated SVG sparkles',
+    'Overlay a faint grid of neon lines and animated particles drifting upward to simulate casino lights',
+    'Apply blurred spotlight beams in the background and add rotating geometric accents on the corners',
+  ];
+
+  const darkOnly = [
+    'Create a midnight neon atmosphere with deep purple gradients, glowing borders and animated dust',
+    'Blend a cosmic starfield with slow-moving light streaks and reflective card surfaces',
+    'Add glossy glassmorphism cards hovering above a smoky background with shimmering edges',
+  ];
+
+  const lightOnly = [
+    'Use soft peach-to-gold gradients with translucent frosted panels and gentle shadow play',
+    'Incorporate watercolor textures with bright highlights and floating translucent bubbles',
+    'Design a sunlit lounge vibe with warm gradients, subtle noise textures and animated confetti lines',
+  ];
+
+  const gameExtras = [
+    'Center a rotating 3D slot wheel silhouette with glowing reels in the background and layered chips',
+    'Feature animated jackpot burst lines behind CTA buttons with shimmering coin trails',
+    'Stack cascading card suits using CSS masks and animate them with slow parallax on scroll',
+  ];
+
+  const pool = [
+    ...shared,
+    ...(themeMode === 'dark' ? darkOnly : lightOnly),
+    ...(isGameSite ? gameExtras : []),
+  ];
+
+  if (!pool.length) {
+    return ['Use layered gradients, floating particles, and parallax imagery to keep the section dynamic.'];
+  }
+  return shuffleArray(Array.from(new Set(pool)));
 }
 
 // Helper to grab all files within a directory (used for game bundles)
@@ -214,6 +271,9 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const publicDir = path.join(process.cwd(), 'public');
     const sourceGamesDir = path.join(publicDir, 'games');
     const { name: languageName } = resolveLanguage(prompt, websiteTypes);
+    const brandTheme = chooseBrandingTheme({ websiteTypes });
+    const brandVisual = inferBrandVisual(websiteTypes, prompt);
+    const styleHints = createStyleHintPool(brandTheme.mode, isGameSite);
 
     // --- Step 1: Read Libraries (Images and Games) via manifest ---
     const imagePaths = Array.isArray(assets.images) ? assets.images : [];
@@ -277,15 +337,25 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const usedImagePaths = new Set<string>();
     const sectionResults: { html: string; model?: string }[] = [];
     const CHUNK_SIZE = 4;
+    const ctaTarget = isGameSite ? 'game.html' : undefined;
 
     for (let i = 0; i < mainSections.length; i += CHUNK_SIZE) {
       const slice = mainSections.slice(i, i + CHUNK_SIZE);
-      const generated = await Promise.all(slice.map(async (section) => {
+      const generated = await Promise.all(slice.map(async (section, index) => {
+        const styleHint = styleHints.length ? styleHints[(i + index) % styleHints.length] : undefined;
         let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
         if (randomImageUrl) {
           usedImagePaths.add(randomImageUrl);
         }
-        const res = await generateHtmlForSection({ section, theme: themeToUse, imageUrl: randomImageUrl, language: languageName });
+        const res = await generateHtmlForSection({
+          section,
+          theme: themeToUse,
+          imageUrl: randomImageUrl,
+          language: languageName,
+          styleHint,
+          themeMode: brandTheme.mode,
+          ctaTarget,
+        });
         if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
         if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
         return { html: res.htmlContent, model: res.model };
@@ -300,15 +370,19 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const policyResult: FlowResult<PolicyContent> = await generatePolicyContent({ siteName, siteDescription: prompt, language: policyLanguage });
     if (policyResult.usage?.inputTokens) totalInputTokens += policyResult.usage.inputTokens;
     if (policyResult.usage?.outputTokens) totalOutputTokens += policyResult.usage.outputTokens;
+    const policyHeadingClass = brandTheme.mode === 'light'
+      ? 'text-3xl font-bold text-slate-900 !mt-12 !mb-4'
+      : 'text-3xl font-bold text-white !mt-12 !mb-4';
     const policyContentHtml = policyResult.sections.map(section => {
       const contentHtml = marked.parse(section.content);
-      return `<section><h2 id="${section.id}" class="text-3xl font-bold text-white !mt-12 !mb-4">${section.title}</h2>${contentHtml}</section>`;
+      return `<section><h2 id="${section.id}" class="${policyHeadingClass}">${section.title}</h2>${contentHtml}</section>`;
     }).join('\n\n');
 
     // --- Step 3: Assemble Final Files Object ---
     console.log('Step 3: Assembling final files object...');
-    const title = siteName || "My Website";
-    const domain = title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 50) || 'my-website';
+    const trimmedSiteName = siteName?.trim();
+    const title = trimmedSiteName && trimmedSiteName.length > 1 ? trimmedSiteName : 'My Website';
+    const normalizedDomain = deriveDomainName({ domain: siteName, types: websiteTypes }, siteName, title);
     
     const files: Record<string, Buffer | string> = {};
     
@@ -331,8 +405,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         gamePageContentResult.title,
         gameIframePath,
         gamePageContentResult.disclaimerHtml,
-        undefined,
-        undefined,
+        brandTheme,
+        brandVisual,
         websiteTypes,
         selectedFaviconPath
       );
@@ -351,8 +425,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
 
     // Add standard files
-    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, undefined, undefined, selectedFaviconPath);
-    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, domain, policyContentHtml, undefined, undefined, websiteTypes, selectedFaviconPath);
+    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, brandTheme, brandVisual, selectedFaviconPath);
+    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, normalizedDomain, policyContentHtml, brandTheme, brandVisual, websiteTypes, selectedFaviconPath);
     files['scripts/main.js'] = mainJsTemplate;
     files['styles/style.css'] = stylesCssTemplate;
     
@@ -380,7 +454,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       model: structureResult.model || sectionResults[0]?.model,
     };
 
-    return { domain, files, history: [...history, prompt], types: websiteTypes, usage };
+    return { domain: normalizedDomain, files, history: [...history, prompt], types: websiteTypes, usage };
 
   } catch (error) {
     console.error(`Fatal generation error for prompt "${prompt}":`, error);

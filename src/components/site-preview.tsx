@@ -96,6 +96,7 @@ import {
 import Editor, { DiffEditor } from '@monaco-editor/react';
 import debounce from 'lodash/debounce';
 import { emmetHTML, emmetCSS, emmetJSX } from 'emmet-monaco-es';
+import { deriveDomainName, extractTypes, slugifyForDomain, toExternalUrl } from '@/lib/domain';
 
 interface SitePreviewProps {
   site: Site;
@@ -177,71 +178,16 @@ type DeployedRecord = {
 
 type ProjectStatusKey = 'all' | 'work' | 'deploy' | 'cloaking';
 
-const normalizeDomainInput = (value?: string | null): string => {
-  if (!value) return '';
-  let cleaned = value.trim();
-  cleaned = cleaned.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-  return cleaned.toLowerCase();
-};
-
-const extractTypes = (meta?: Record<string, any> | null): string[] => {
-  if (!meta) return [];
-  const raw = meta?.types ?? meta?.siteTypes ?? meta?.site_types;
-  if (Array.isArray(raw)) return raw;
-  if (typeof raw === 'string') return raw.split(/[,;]+/).map((t: string) => t.trim()).filter(Boolean);
-  return [];
-};
-
-const inferTld = (types: string[]): string => {
-  const joined = types.join(' ').toLowerCase();
-  if (joined.includes('sport') && joined.includes('poland')) return '.pl';
-  return '.com';
-};
-
-const slugifyBase = (value?: string): string => {
-  if (!value) return '';
-  return value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-};
-
-const deriveProjectDomain = (project: ProjectRecord): string => {
-  const candidate = normalizeDomainInput(
-    typeof project.meta?.domain === 'string'
-      ? project.meta.domain
-      : typeof project.meta?.customDomain === 'string'
-      ? project.meta.customDomain
-      : undefined
+const deriveProjectDomain = (project: ProjectRecord): string =>
+  deriveDomainName(
+    {
+      domain: typeof project.meta?.domain === 'string' ? project.meta.domain : undefined,
+      customDomain: typeof project.meta?.customDomain === 'string' ? project.meta.customDomain : undefined,
+      types: extractTypes(project.meta || null),
+    },
+    project.slug,
+    project.name,
   );
-  const types = extractTypes(project.meta ?? null);
-  const ensureTld = (base: string): string => {
-    if (!base) return '';
-    let next = base;
-    if (!next.includes('.')) {
-      if (next.endsWith('com')) {
-        next = `${next.slice(0, -3)}.com`;
-      } else if (next.endsWith('pl')) {
-        next = `${next.slice(0, -2)}.pl`;
-      }
-    }
-    if (!next.includes('.')) {
-      next = `${next}${inferTld(types)}`;
-    }
-    return next
-      .replace(/\.\.+/g, '.')
-      .replace(/\.$/, '');
-  };
-  if (candidate) return ensureTld(candidate);
-  const fallback = slugifyBase(project.slug) || slugifyBase(project.name);
-  return ensureTld(fallback);
-};
-
-const toExternalUrl = (domain: string): string => {
-  if (!domain) return '#';
-  return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
-};
 
 const PROJECT_STATUS_PRESETS: { key: ProjectStatusKey; label: string; matches: string[] | null }[] = [
   { key: 'all', label: 'All', matches: null },
@@ -422,13 +368,10 @@ export function SitePreview({
   // Slug for filenames/folders (fallbacks to domain or generic name)
   const slugName = useMemo(() => {
     const base = displayName || site.domain || 'website';
-    const ascii = base
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '') // strip diacritics
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    return ascii || (site.domain || 'website');
+    const slug = slugifyForDomain(base);
+    if (slug) return slug;
+    const domainSlug = typeof site.domain === 'string' ? slugifyForDomain(site.domain) : '';
+    return domainSlug || 'website';
   }, [displayName, site.domain]);
   const cacheIdentity = site.domain || slugName;
   const [activeFile, setActiveFile] = useState<string>('index.html');
@@ -487,15 +430,17 @@ export function SitePreview({
   const [projectsDeletePending, setProjectsDeletePending] = useState(false);
   
 
-  const suggestedTld = useMemo(() => {
-    const selectedTypes = (site as any).types as string[] | undefined;
-    const isSportPl = selectedTypes?.includes('Sport bar Poland');
-    return isSportPl ? 'pl' : 'com';
-  }, [site]);
   const suggestedDomain = useMemo(() => {
-    const base = site.domain || slugName;
-    return `${base}.${suggestedTld}`;
-  }, [site, slugName, suggestedTld]);
+    const selectedTypes = ((site as any).types as string[]) || [];
+    return deriveDomainName(
+      {
+        domain: typeof site.domain === 'string' ? site.domain : undefined,
+        types: selectedTypes,
+      },
+      slugName,
+      displayName,
+    );
+  }, [site, slugName, displayName]);
   const suggestedDocroot = useMemo(() => `/website/${suggestedDomain}`, [suggestedDomain]);
 
   // Fetch user profile on mount
@@ -600,6 +545,14 @@ export function SitePreview({
     setPublishLog([]);
     setPublishedUrl(null);
 
+    const immediateDomain = suggestedDomain || '';
+    setTargetDomain(immediateDomain);
+    if (immediateDomain) {
+      setDocRoot(`/website/${immediateDomain.replace(/^www\./, '')}`);
+    } else {
+      setDocRoot('');
+    }
+
     (async () => {
       try {
         const sb = await getSupabase();
@@ -622,9 +575,15 @@ export function SitePreview({
         setCpUser(dbSettings.username || '');
         setCpToken(dbSettings.token || '');
 
-        // Set domain and docroot, prioritizing site-specific suggestions over DB settings
-        setTargetDomain(suggestedDomain || dbSettings.domain || '');
-        setDocRoot(suggestedDocroot || dbSettings.docroot || '');
+        const savedDomain = typeof dbSettings.domain === 'string' ? dbSettings.domain : '';
+        const savedDocroot = typeof dbSettings.docroot === 'string' ? dbSettings.docroot : '';
+
+        if (!suggestedDomain && savedDomain) {
+          setTargetDomain(savedDomain);
+          setDocRoot(savedDocroot || `/website/${savedDomain.replace(/^www\./, '')}`);
+        } else if (suggestedDomain && savedDomain && suggestedDomain === savedDomain && savedDocroot) {
+          setDocRoot(savedDocroot);
+        }
       } catch (e) { console.error("Failed to load publish settings", e); }
       finally { setCredsLoaded(true); }
     })();
@@ -806,17 +765,25 @@ export function SitePreview({
     payload.set('domain', targetDomain);
     payload.set('docRoot', docRoot);
     payload.set('files', JSON.stringify(site.files));
-    const res = await publishToCpanelAction({}, payload as any);
-    setIsPublishing(false);
-    // keep modal open and show result
-    if (res.success) {
-      setPublishProgress(4);
-      setPublishLog((prev) => [...prev, ...(res.log || []), 'Done']);
-      setPublishedUrl(res.url || null);
-      toast({ title: 'Published', description: `Deployed to ${res.url}` });
-    } else {
-      setPublishLog((prev) => [...prev, res.error || 'Unknown error']);
-      toast({ variant: 'destructive', title: 'Publish failed', description: res.error || 'Unknown error' });
+    try {
+      const res = await publishToCpanelAction({}, payload as any);
+      setIsPublishing(false);
+      // keep modal open and show result
+      if (res.success) {
+        setPublishProgress(4);
+        setPublishLog((prev) => [...prev, ...(res.log || []), 'Done']);
+        setPublishedUrl(res.url || null);
+        toast({ title: 'Published', description: `Deployed to ${res.url}` });
+      } else {
+        setPublishLog((prev) => [...prev, res.error || 'Unknown error']);
+        toast({ variant: 'destructive', title: 'Publish failed', description: res.error || 'Unknown error' });
+      }
+    } catch (err: any) {
+      console.error('Publish action failed', err);
+      setIsPublishing(false);
+      const message = err?.message || 'Unexpected server response';
+      setPublishLog((prev) => [...prev, message]);
+      toast({ variant: 'destructive', title: 'Publish failed', description: message });
     }
   };
 
@@ -2882,12 +2849,12 @@ export function SitePreview({
                   </div>
                 </div>
                 <Tabs value={projectsPreset} onValueChange={(value) => setProjectsPreset(value as ProjectStatusKey)}>
-                  <TabsList className="flex flex-wrap gap-2 rounded-full bg-transparent p-1 border border-transparent">
+                  <TabsList className="flex flex-wrap gap-2 rounded-xl border border-white/5 bg-white/5 p-2">
                     {PROJECT_STATUS_PRESETS.map((preset) => (
                       <TabsTrigger
                         key={preset.key}
                         value={preset.key}
-                        className="group relative flex flex-1 items-center justify-center gap-2 rounded-full border border-transparent px-4 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/[0.08] data-[state=active]:border-sky-400/70 data-[state=active]:bg-sky-400/15 data-[state=active]:text-white sm:flex-none"
+                        className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2 text-xs font-medium text-slate-200 transition data-[state=active]:border-sky-400/50 data-[state=active]:bg-sky-400/10 data-[state=active]:text-white sm:flex-none"
                       >
                         {PROJECT_STATUS_STYLES[preset.key].icon}
                         <span>{PROJECT_STATUS_STYLES[preset.key].label}</span>
