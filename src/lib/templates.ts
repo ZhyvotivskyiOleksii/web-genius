@@ -87,7 +87,7 @@ const fallbackTheme: BrandingTheme = {
   footerTextClass: 'text-gray-400',
   cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-slate-800/90 backdrop-blur-sm p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out',
   cookieTextClass: 'text-sm text-gray-300',
-  cookieButtonClass: 'px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-500 transition',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-indigo-600 text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.2)] hover:bg-indigo-500 hover:-translate-y-[1px] transition shadow-lg shadow-indigo-500/25',
   brandBadgeClass: 'bg-white/10 text-white',
   logoGradient: 'linear-gradient(90deg, #7f5af0 0%, #5a31f0 50%, #0ea5e9 100%)',
   styleBlock: '.brand-title { background: linear-gradient(90deg,#7f5af0,#5a31f0,#0ea5e9); -webkit-background-clip: text; color: transparent; background-clip: text; }',
@@ -112,7 +112,7 @@ const auroraDarkTheme: BrandingTheme = {
   footerTextClass: 'text-slate-400',
   cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-[#0b0f1e]/90 backdrop-blur-lg p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-white/10',
   cookieTextClass: 'text-sm text-slate-200',
-  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#a855f7] to-[#6366f1] text-white hover:brightness-110 transition',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#a855f7] to-[#6366f1] text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.25)] hover:brightness-105 hover:-translate-y-[1px] transition shadow-lg shadow-violet-500/25 hover:shadow-violet-400/35',
   brandBadgeClass: 'bg-white/10 text-white shadow-[0_6px_18px_rgba(124,58,237,0.35)]',
   logoGradient: 'linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #22d3ee 100%)',
   styleBlock: '.brand-title { background: linear-gradient(135deg,#c084fc,#818cf8,#22d3ee); -webkit-background-clip: text; color: transparent; background-clip: text; }',
@@ -137,7 +137,7 @@ const cyberDarkTheme: BrandingTheme = {
   footerTextClass: 'text-slate-400',
   cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-[#03111f]/90 backdrop-blur-xl p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-cyan-400/20',
   cookieTextClass: 'text-sm text-slate-200',
-  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#06b6d4] to-[#3b82f6] text-white hover:brightness-110 transition',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#06b6d4] to-[#3b82f6] text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.2)] hover:brightness-105 hover:-translate-y-[1px] transition shadow-lg shadow-cyan-500/20 hover:shadow-cyan-400/30',
   brandBadgeClass: 'bg-cyan-500/20 text-white shadow-[0_6px_18px_rgba(6,182,212,0.45)]',
   logoGradient: 'linear-gradient(135deg, #67e8f9 0%, #38bdf8 50%, #818cf8 100%)',
   styleBlock: '.brand-title { background: linear-gradient(135deg,#67e8f9,#38bdf8,#818cf8); -webkit-background-clip: text; color: transparent; background-clip: text; }',
@@ -187,7 +187,7 @@ const coastalLightTheme: BrandingTheme = {
   footerTextClass: 'text-slate-500',
   cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-white/92 backdrop-blur-lg p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-blue-200',
   cookieTextClass: 'text-sm text-slate-600',
-  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#38bdf8] to-[#22d3ee] text-white hover:brightness-110 transition',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-gradient-to-r from-[#38bdf8] to-[#22d3ee] text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.25)] hover:brightness-105 hover:-translate-y-[1px] transition shadow-lg shadow-sky-500/20 hover:shadow-sky-400/30',
   brandBadgeClass: 'bg-gradient-to-br from-blue-100 to-white text-blue-700 shadow-[0_8px_20px_rgba(56,189,248,0.25)]',
   logoGradient: 'linear-gradient(120deg, #38bdf8 0%, #22d3ee 50%, #fda4af 100%)',
   styleBlock: '.brand-title { background: linear-gradient(120deg,#38bdf8,#22d3ee,#fda4af); -webkit-background-clip: text; color: transparent; background-clip: text; }',
@@ -1109,6 +1109,55 @@ body.overflow-hidden { overflow: hidden; }
     border-radius: 9999px;
     background-color: currentColor;
     transition: transform 0.35s ease, opacity 0.3s ease, width 0.3s ease;
+}
+section.generated-section {
+    position: relative;
+    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.5rem, 5vw, 4rem);
+    margin: clamp(1.5rem, 4vw, 3.5rem) auto;
+    border-radius: 2.5rem;
+    backdrop-filter: blur(18px);
+    box-shadow: 0 28px 90px rgba(10, 16, 35, 0.28);
+    border: 1px solid rgba(148, 163, 184, 0.14);
+}
+section.generated-section:nth-of-type(odd) {
+    background: linear-gradient(145deg, rgba(15,23,42,0.92), rgba(30,41,59,0.75));
+    color: rgba(248, 250, 252, 0.9);
+}
+section.generated-section:nth-of-type(even) {
+    background: linear-gradient(145deg, rgba(236, 238, 255, 0.16), rgba(148, 163, 184, 0.08));
+}
+section.generated-section :where(img) {
+    display: block;
+    width: min(520px, 100%);
+    max-height: clamp(220px, 45vh, 520px);
+    object-fit: cover;
+    border-radius: 1.75rem;
+    box-shadow: 0 25px 60px rgba(15, 23, 42, 0.35);
+    margin: clamp(1.5rem, 4vw, 3rem) auto;
+}
+section.generated-section :where(figure) {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+section.generated-section :where(figcaption) {
+    font-size: 0.9rem;
+    opacity: 0.7;
+    max-width: min(520px, 100%);
+    text-align: center;
+}
+@media (max-width: 768px) {
+    section.generated-section {
+        padding: clamp(1.75rem, 8vw, 3rem) clamp(1.25rem, 6vw, 2.25rem);
+        margin: clamp(1rem, 5vw, 2.5rem) auto;
+        border-radius: 2rem;
+    }
+    section.generated-section :where(img) {
+        width: min(420px, 100%);
+        max-height: clamp(180px, 55vw, 360px);
+        border-radius: 1.5rem;
+    }
 }
 .burger-icon.is-open .burger-line:nth-child(1) {
     transform: translateY(0.525rem) rotate(45deg);

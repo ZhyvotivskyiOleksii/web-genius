@@ -667,11 +667,25 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
             if (section.type && !/data-section-type=/.test(updated)) {
               updated += ` data-section-type="${section.type}"`;
             }
+            if (/class\s*=/.test(updated)) {
+              updated = updated.replace(/class\s*=\s*"([^"]*)"/i, (full, classes) => {
+                const appended = classes.split(/\s+/).filter(Boolean);
+                if (!appended.includes('generated-section')) appended.push('generated-section');
+                return ` class="${appended.join(' ')}"`;
+              });
+            } else {
+              updated += ' class="generated-section"';
+            }
             return `<section${updated}>`;
           });
         } else {
           const sectionTypeAttr = section.type ? ` data-section-type="${section.type}"` : '';
           cleanHtml = `<section id="${candidate}"${sectionTypeAttr} class="generated-section">${cleanHtml}</section>`;
+        }
+
+        const sectionLower = cleanHtml.toLowerCase();
+        if (sectionLower.includes('cookie') && (sectionLower.includes('accept') || sectionLower.includes('consent'))) {
+          return { html: '', model: res.model };
         }
 
         const navInfo = resolveNavAnchor(section);
