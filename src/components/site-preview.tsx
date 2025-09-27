@@ -111,6 +111,7 @@ type TreeNode = {
 };
 
 type ChatMessage = {
+  id?: string;
   sender: 'user' | 'ai';
   text: string;
   file?: string;
@@ -120,6 +121,10 @@ type ChatMessage = {
   inputTokens?: number;
   outputTokens?: number;
   model?: string;
+  pending?: boolean;
+  language?: string;
+  modifications?: { fileName: string; code: string | null }[];
+  isApplied?: boolean;
 };
 
 type OpenTab = {
@@ -142,6 +147,17 @@ const getChatCacheKey = (siteId: string | null, slug: string) => {
   return `${CHAT_CACHE_PREFIX}${base}`;
 };
 
+const generateMessageId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+const createPendingAiMessage = (id: string, file?: string): ChatMessage => ({
+  id,
+  sender: 'ai',
+  text: '',
+  file,
+  createdAt: new Date().toISOString(),
+  pending: true,
+});
+
 type ProjectRecord = {
   id: string;
   name: string;
@@ -161,31 +177,97 @@ type DeployedRecord = {
 
 type ProjectStatusKey = 'all' | 'work' | 'deploy' | 'cloaking';
 
+const normalizeDomainInput = (value?: string | null): string => {
+  if (!value) return '';
+  let cleaned = value.trim();
+  cleaned = cleaned.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+  return cleaned.toLowerCase();
+};
+
+const extractTypes = (meta?: Record<string, any> | null): string[] => {
+  if (!meta) return [];
+  const raw = meta?.types ?? meta?.siteTypes ?? meta?.site_types;
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === 'string') return raw.split(/[,;]+/).map((t: string) => t.trim()).filter(Boolean);
+  return [];
+};
+
+const inferTld = (types: string[]): string => {
+  const joined = types.join(' ').toLowerCase();
+  if (joined.includes('sport') && joined.includes('poland')) return '.pl';
+  return '.com';
+};
+
+const slugifyBase = (value?: string): string => {
+  if (!value) return '';
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+};
+
+const deriveProjectDomain = (project: ProjectRecord): string => {
+  const candidate = normalizeDomainInput(
+    typeof project.meta?.domain === 'string'
+      ? project.meta.domain
+      : typeof project.meta?.customDomain === 'string'
+      ? project.meta.customDomain
+      : undefined
+  );
+  const types = extractTypes(project.meta ?? null);
+  const ensureTld = (base: string): string => {
+    if (!base) return '';
+    let next = base;
+    if (!next.includes('.')) {
+      if (next.endsWith('com')) {
+        next = `${next.slice(0, -3)}.com`;
+      } else if (next.endsWith('pl')) {
+        next = `${next.slice(0, -2)}.pl`;
+      }
+    }
+    if (!next.includes('.')) {
+      next = `${next}${inferTld(types)}`;
+    }
+    return next
+      .replace(/\.\.+/g, '.')
+      .replace(/\.$/, '');
+  };
+  if (candidate) return ensureTld(candidate);
+  const fallback = slugifyBase(project.slug) || slugifyBase(project.name);
+  return ensureTld(fallback);
+};
+
+const toExternalUrl = (domain: string): string => {
+  if (!domain) return '#';
+  return /^https?:\/\//i.test(domain) ? domain : `https://${domain}`;
+};
+
 const PROJECT_STATUS_PRESETS: { key: ProjectStatusKey; label: string; matches: string[] | null }[] = [
-  { key: 'all', label: 'Все', matches: null },
-  { key: 'work', label: 'В работе', matches: ['draft', 'work', 'in_progress', 'pending', 'edit'] },
-  { key: 'deploy', label: 'Деплой', matches: ['deploy', 'published', 'live', 'production'] },
-  { key: 'cloaking', label: 'Клоакинг', matches: ['cloak', 'cloaking', 'stealth'] },
+  { key: 'all', label: 'All', matches: null },
+  { key: 'work', label: 'In Progress', matches: ['draft', 'work', 'in_progress', 'pending', 'edit'] },
+  { key: 'deploy', label: 'Deploy', matches: ['deploy', 'published', 'live', 'production'] },
+  { key: 'cloaking', label: 'Cloaking', matches: ['cloak', 'cloaking', 'stealth'] },
 ];
 
 const PROJECT_STATUS_STYLES: Record<ProjectStatusKey, { label: string; badgeClass: string; icon: JSX.Element }> = {
   all: {
-    label: 'Все',
+    label: 'All',
     badgeClass: 'border-white/10 bg-white/5 text-slate-100',
     icon: <Rocket className="h-3.5 w-3.5" />,
   },
   work: {
-    label: 'В работе',
+    label: 'In Progress',
     badgeClass: 'border-sky-500/30 bg-sky-500/15 text-sky-200',
     icon: <Wrench className="h-3.5 w-3.5" />,
   },
   deploy: {
-    label: 'Деплой',
+    label: 'Deploy',
     badgeClass: 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200',
     icon: <Rocket className="h-3.5 w-3.5" />,
   },
   cloaking: {
-    label: 'Клоакинг',
+    label: 'Cloaking',
     badgeClass: 'border-purple-500/30 bg-purple-500/15 text-purple-200',
     icon: <EyeOff className="h-3.5 w-3.5" />,
   },
@@ -208,11 +290,13 @@ const normalizeCachedMessage = (entry: any): ChatMessage | null => {
   if (!sender) return null;
   const text = typeof entry.text === 'string' ? entry.text : '';
   const message: ChatMessage = { sender, text };
+  message.id = typeof entry.id === 'string' ? entry.id : generateMessageId();
   if (typeof entry.file === 'string') message.file = entry.file;
   if (typeof entry.createdAt === 'string') message.createdAt = entry.createdAt;
   if (typeof entry.inputTokens === 'number') message.inputTokens = entry.inputTokens;
   if (typeof entry.outputTokens === 'number') message.outputTokens = entry.outputTokens;
   if (typeof entry.model === 'string') message.model = entry.model;
+  message.pending = !!entry.pending && sender === 'ai';
   if (entry.diff && typeof entry.diff === 'object') {
     const { added, removed } = entry.diff as { added?: unknown; removed?: unknown };
     if (typeof added === 'number' && typeof removed === 'number') {
@@ -578,9 +662,9 @@ export function SitePreview({
         }
       } catch (e: any) {
         if (cancelled) return;
-        const message = e?.message || 'Не удалось загрузить проекты';
+        const message = e?.message || 'Failed to load projects';
         setProjectsError(message);
-        toast({ variant: 'destructive', title: 'Ошибка', description: message });
+        toast({ variant: 'destructive', title: 'Error', description: message });
       } finally {
         if (!cancelled) setProjectsLoading(false);
       }
@@ -622,7 +706,7 @@ export function SitePreview({
           });
       if (!matchesPreset) return false;
       if (!query) return true;
-      const domain = project.meta?.domain ? String(project.meta.domain).toLowerCase() : '';
+      const domain = deriveProjectDomain(project).toLowerCase();
       return (
         project.name.toLowerCase().includes(query) ||
         project.slug.toLowerCase().includes(query) ||
@@ -652,7 +736,7 @@ export function SitePreview({
   const handleProjectOpen = useCallback(async (project: ProjectRecord) => {
     try {
       const sb = await getSupabase();
-      if (!sb) throw new Error('Supabase не настроен');
+      if (!sb) throw new Error('Supabase is not configured');
       const { data: files, error } = await sb
         .from('site_files')
         .select('path,content')
@@ -669,9 +753,9 @@ export function SitePreview({
       }));
       setSiteId(project.id);
       setIsProjectsOpen(false);
-      toast({ title: 'Проект открыт', description: `Загружен «${project.name}».` });
+      toast({ title: 'Project opened', description: `Loaded “${project.name}”.` });
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Не удалось открыть', description: e?.message || 'Ошибка загрузки проекта.' });
+      toast({ variant: 'destructive', title: 'Unable to open', description: e?.message || 'Project load failed.' });
     }
   }, [toast, setSite, setSiteId, setIsProjectsOpen]);
 
@@ -680,9 +764,9 @@ export function SitePreview({
     try {
       setProjectsDeletePending(true);
       const sb = await getSupabase();
-      if (!sb) throw new Error('Supabase не настроен');
+      if (!sb) throw new Error('Supabase is not configured');
       const { data: auth } = await sb.auth.getUser();
-      if (!auth.user?.id) throw new Error('Авторизация истекла');
+      if (!auth.user?.id) throw new Error('Session expired');
       const id = projectsDeleteTarget.id;
       await sb.from('site_files').delete().eq('site_id', id);
       const { error } = await sb.from('sites').delete().eq('id', id).eq('user_id', auth.user.id);
@@ -691,9 +775,9 @@ export function SitePreview({
       if (siteId === id) {
         setSiteId(null);
       }
-      toast({ title: 'Проект удалён', description: `«${projectsDeleteTarget.name}» отправлен в архив.` });
+      toast({ title: 'Project removed', description: `“${projectsDeleteTarget.name}” moved to archive.` });
     } catch (e: any) {
-      toast({ variant: 'destructive', title: 'Не получилось', description: e?.message || 'Удаление не удалось.' });
+      toast({ variant: 'destructive', title: 'Failed', description: e?.message || 'Could not delete project.' });
     } finally {
       setProjectsDeletePending(false);
       setProjectsDeleteTarget(null);
@@ -701,12 +785,12 @@ export function SitePreview({
   }, [projectsDeleteTarget, toast, siteId, setSiteId]);
 
 
-  // Auto-start убран — запуск только по кнопке Publish
+  // Auto-start removed — publish runs only when the user clicks Publish
 
   const runPublish = async () => {
     const baseOk = !!cpHost && !!cpUser && !!cpToken;
     if (!baseOk || !targetDomain || !docRoot) {
-      toast({ variant: 'destructive', title: 'Missing data', description: 'Заполните обязательные поля для публикации.' });
+      toast({ variant: 'destructive', title: 'Missing data', description: 'Fill in the required fields before publishing.' });
       return;
     }
     setIsPublishing(true);
@@ -756,6 +840,45 @@ export function SitePreview({
   );
   const [chatPrompt, setChatPrompt] = useState('');
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const pendingAiMessageIdsRef = useRef<{ code: string | null; element: string | null; bulk: string | null }>({ code: null, element: null, bulk: null });
+
+  const settlePendingMessage = useCallback((key: 'code' | 'element' | 'bulk', message: ChatMessage) => {
+    const placeholderId = pendingAiMessageIdsRef.current[key];
+    pendingAiMessageIdsRef.current[key] = null;
+    setChatHistory((prev) => {
+      const next = [...prev];
+      if (placeholderId) {
+        const idx = next.findIndex((msg) => msg.id === placeholderId);
+        if (idx !== -1) {
+          next[idx] = { ...message, id: placeholderId, pending: false };
+          return next;
+        }
+      }
+      next.push({ ...message, id: message.id || generateMessageId(), pending: false });
+      return next;
+    });
+  }, []);
+
+  const clearPendingMessage = useCallback((key: 'code' | 'element' | 'bulk') => {
+    const placeholderId = pendingAiMessageIdsRef.current[key];
+    pendingAiMessageIdsRef.current[key] = null;
+    if (!placeholderId) return;
+    setChatHistory((prev) => prev.filter((msg) => msg.id !== placeholderId));
+  }, []);
+
+  const removeLatestUserMessage = useCallback((fileLabel?: string) => {
+    setChatHistory((prev) => {
+      const next = [...prev];
+      for (let i = next.length - 1; i >= 0; i--) {
+        const msg = next[i];
+        if (msg.sender === 'user' && (fileLabel ? msg.file === fileLabel : true)) {
+          next.splice(i, 1);
+          break;
+        }
+      }
+      return next;
+    });
+  }, []);
 
   const previousSiteIdRef = useRef<string | null>(siteId);
   const previousCacheIdentityRef = useRef<string>(cacheIdentity);
@@ -788,10 +911,11 @@ export function SitePreview({
     if (typeof window === 'undefined') return;
     const cacheKey = getChatCacheKey(siteId, cacheIdentity);
     try {
-      if (!chatHistory.length) {
+      const persistable = chatHistory.filter((msg) => !msg.pending);
+      if (!persistable.length) {
         window.localStorage.removeItem(cacheKey);
       } else {
-        window.localStorage.setItem(cacheKey, JSON.stringify(chatHistory));
+        window.localStorage.setItem(cacheKey, JSON.stringify(persistable));
       }
     } catch {
       // Ignore storage failures (e.g., private mode)
@@ -832,6 +956,7 @@ export function SitePreview({
         const diff = meta?.diff;
         const diffs = meta?.diffs;
         return {
+          id: typeof m.id === 'string' ? m.id : generateMessageId(),
           sender: m.role === 'user' ? 'user' : 'ai',
           text: m.text,
           file: m.file || undefined,
@@ -841,6 +966,7 @@ export function SitePreview({
           inputTokens: typeof m.input_tokens === 'number' ? m.input_tokens : undefined,
           outputTokens: typeof m.output_tokens === 'number' ? m.output_tokens : undefined,
           model: undefined,
+          pending: false,
         };
       });
       setChatHistory(msgs);
@@ -1054,7 +1180,7 @@ export function SitePreview({
         ...prev,
         files: { ...prev.files, [updatedFile]: code },
       }));
-      // Persist the change к DB сразу, чтобы переживало reload
+      // Persist the change to the DB immediately so it survives reloads
       (async () => { await saveImmediate({ [updatedFile]: code }); })();
       const { added, removed } = computeDiffStats(pendingOriginalCode, code);
       pushRevision(updatedFile, pendingOriginalCode, code, added, removed);
@@ -1067,19 +1193,16 @@ export function SitePreview({
         };
         const saved = await persistChat('ai', reasoning, updatedFile, extras);
         const createdAt = (saved as any)?.created_at || new Date().toISOString();
-        setChatHistory((prev) => [
-          ...prev,
-          {
-            sender: 'ai',
-            text: reasoning,
-            file: updatedFile,
-            diff: { added, removed },
-            createdAt,
-            inputTokens: extras.inputTokens,
-            outputTokens: extras.outputTokens,
-            model: extras.model,
-          },
-        ]);
+        settlePendingMessage('code', {
+          sender: 'ai',
+          text: reasoning,
+          file: updatedFile,
+          diff: { added, removed },
+          createdAt,
+          inputTokens: extras.inputTokens,
+          outputTokens: extras.outputTokens,
+          model: extras.model,
+        });
       })();
       lastHandledResponseRef.current = editState.response;
       lastHandledErrorRef.current = null;
@@ -1094,13 +1217,16 @@ export function SitePreview({
         title: 'Editing Failed',
         description: editState.error,
       });
-      setChatHistory((prev) => prev.slice(0, -1));
+      clearPendingMessage('code');
+      if (pendingEditFile) {
+        removeLatestUserMessage(pendingEditFile);
+      }
       setPendingEditFile(null);
       lastHandledErrorRef.current = editState.error;
       lastHandledResponseRef.current = null;
     }
     // Only react to changes in editState when a pending file exists.
-  }, [editState, pendingEditFile, toast, pendingOriginalCode, persistChat, pushRevision, saveImmediate]);
+  }, [editState, pendingEditFile, toast, pendingOriginalCode, persistChat, pushRevision, saveImmediate, settlePendingMessage, clearPendingMessage]);
   
   useEffect(() => {
     if (!pendingElementTarget) return;
@@ -1139,19 +1265,16 @@ export function SitePreview({
         };
         const saved = await persistChat('ai', reasoning, fileName, extras);
         const createdAt = (saved as any)?.created_at || new Date().toISOString();
-        setChatHistory((prev) => [
-          ...prev,
-          {
-            sender: 'ai',
-            text: reasoning,
-            file: fileName,
-            diff: { added, removed },
-            createdAt,
-            inputTokens: extras.inputTokens,
-            outputTokens: extras.outputTokens,
-            model: extras.model,
-          },
-        ]);
+        settlePendingMessage('element', {
+          sender: 'ai',
+          text: reasoning,
+          file: fileName,
+          diff: { added, removed },
+          createdAt,
+          inputTokens: extras.inputTokens,
+          outputTokens: extras.outputTokens,
+          model: extras.model,
+        });
       })();
       toast({
         title: 'Section Updated',
@@ -1174,14 +1297,17 @@ export function SitePreview({
         title: 'Element Editing Failed',
         description: elementEditState.error,
       });
-      setChatHistory((prev) => prev.slice(0, -1));
+      clearPendingMessage('element');
+      if (pendingElementTarget) {
+        removeLatestUserMessage(pendingElementTarget.fileName);
+      }
       setPendingElementTarget(null);
       setPendingElementOriginalFile('');
       setPendingElementOriginalCss('');
       lastHandledElementErrorRef.current = elementEditState.error;
       lastHandledElementResponseRef.current = null;
     }
-  }, [elementEditState, pendingElementTarget, pendingElementOriginalFile, pendingElementOriginalCss, toast, pushRevision, saveImmediate, persistChat]);
+  }, [elementEditState, pendingElementTarget, pendingElementOriginalFile, pendingElementOriginalCss, toast, pushRevision, saveImmediate, persistChat, settlePendingMessage, clearPendingMessage]);
 
   // --- AI BULK EDIT LOGIC ---
   const lastHandledBulkResponseRef = useRef<any>(null);
@@ -1194,7 +1320,8 @@ export function SitePreview({
           title: 'Bulk Editing Failed',
           description: bulkState.error
         });
-        setChatHistory((prev) => prev.slice(0, -1));
+        clearPendingMessage('bulk');
+        removeLatestUserMessage('Whole Project');
         setPendingBulkOriginal(null);
       }
       return;
@@ -1223,45 +1350,40 @@ export function SitePreview({
         const saved = await persistChat('ai', reasoning, 'Whole Project', extras);
         const createdAt = (saved as any)?.created_at || new Date().toISOString();
 
-        setChatHistory(prev => [
-          ...prev,
-          {
-            sender: 'ai',
-            text: reasoning,
-            file: 'Whole Project',
-            diffs: changes,
-            modifications: modifications,
-            isApplied: false,
-            createdAt,
-            inputTokens: extras.inputTokens,
-            outputTokens: extras.outputTokens,
-            model: extras.model,
-          },
-        ]);
+        settlePendingMessage('bulk', {
+          sender: 'ai',
+          text: reasoning,
+          file: 'Whole Project',
+          diffs: changes,
+          modifications: modifications,
+          isApplied: false,
+          createdAt,
+          inputTokens: extras.inputTokens,
+          outputTokens: extras.outputTokens,
+          model: extras.model,
+        } as ChatMessage);
         toast({ title: 'AI has suggested changes', description: 'Review and apply them in the chat.' });
       } else if (answer) {
         const saved = await persistChat('ai', answer, 'Whole Project', extras);
         const createdAt = (saved as any)?.created_at || new Date().toISOString();
-        setChatHistory(prev => [
-          ...prev,
-          {
-            sender: 'ai',
-            text: answer,
-            file: 'Whole Project',
-            createdAt,
-            inputTokens: extras.inputTokens,
-            outputTokens: extras.outputTokens,
-            model: extras.model,
-          },
-        ]);
+        settlePendingMessage('bulk', {
+          sender: 'ai',
+          text: answer,
+          file: 'Whole Project',
+          createdAt,
+          inputTokens: extras.inputTokens,
+          outputTokens: extras.outputTokens,
+          model: extras.model,
+        });
       } else {
         // No changes and no answer, maybe an error case not caught before
         toast({ title: 'No Changes Made', description: 'The AI did not suggest any code modifications.' });
-        setChatHistory(prev => prev.slice(0, -1)); // remove user prompt
+        clearPendingMessage('bulk');
+        removeLatestUserMessage('Whole Project');
       }
       setPendingBulkOriginal(null);
     })();
-  }, [bulkState, isBulkEditing, toast, pendingBulkOriginal, persistChat, pushRevision, saveImmediate]);
+  }, [bulkState, isBulkEditing, toast, pendingBulkOriginal, persistChat, pushRevision, saveImmediate, settlePendingMessage, clearPendingMessage, removeLatestUserMessage]);
 
   // Visual progress while the AI is editing (client-side simulated steps, no loop)
   useEffect(() => {
@@ -1298,10 +1420,14 @@ export function SitePreview({
       if (!ok) { toast({ variant: 'destructive', title: 'Not saved', description: 'Sign in required' }); return; }
       const saved = await persistChat('user', chatPrompt, activeFile);
       const createdAt = (saved as any)?.created_at || new Date().toISOString();
+      const userMessageId = generateMessageId();
+      const placeholderId = generateMessageId();
       setChatHistory((prev) => [
         ...prev,
-        { sender: 'user', text: chatPrompt, file: activeFile, createdAt },
+        { id: userMessageId, sender: 'user', text: chatPrompt, file: activeFile, createdAt },
+        createPendingAiMessage(placeholderId, activeFile),
       ]);
+      pendingAiMessageIdsRef.current.code = placeholderId;
     })();
     setChatPrompt('');
   };
@@ -2134,7 +2260,7 @@ export function SitePreview({
     });
 
     button = document.createElement('button');
-    button.textContent = 'Редагувати';
+    button.textContent = 'Edit';
     Object.assign(button.style, {
       padding: '6px 14px',
       fontSize: '12px',
@@ -2629,7 +2755,7 @@ export function SitePreview({
       >
         <DialogContent className="max-w-md rounded-xl border border-white/10 bg-[#111216] text-slate-100">
           <DialogHeader>
-            <DialogTitle>Редагувати елемент</DialogTitle>
+            <DialogTitle>Edit element</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="max-h-48 overflow-auto rounded-md bg-black/30 border border-white/10 p-3 text-xs text-slate-300">
@@ -2650,15 +2776,21 @@ export function SitePreview({
                 const originalFile = (site.files[elementTarget.fileName] as string) || '';
                 setPendingElementOriginalFile(originalFile);
                 setPendingElementOriginalCss(elementCssContext);
+                const userMessageId = generateMessageId();
+                const placeholderId = generateMessageId();
+                const createdAt = new Date().toISOString();
                 setChatHistory((prev) => [
                   ...prev,
                   {
+                    id: userMessageId,
                     sender: 'user',
                     text: trimmed,
                     file: elementTarget.fileName,
-                    createdAt: new Date().toISOString(),
+                    createdAt,
                   },
+                  createPendingAiMessage(placeholderId, elementTarget.fileName),
                 ]);
+                pendingAiMessageIdsRef.current.element = placeholderId;
                 setElementPrompt('');
               }}
               className="space-y-3"
@@ -2667,7 +2799,7 @@ export function SitePreview({
                 name="prompt"
                 value={elementPrompt}
                 onChange={(e) => setElementPrompt(e.target.value)}
-                placeholder="Опишіть, які зміни внести..."
+                placeholder="Describe the changes you want to apply..."
                 className="min-h-[120px] bg-[#131417] text-sm text-slate-200 border border-slate-700"
                 disabled={isElementEditing}
               />
@@ -2720,8 +2852,8 @@ export function SitePreview({
         <DialogContent className="max-w-3xl border border-white/10 bg-[#05070f] text-slate-100">
           <div className="space-y-6">
             <DialogHeader className="space-y-1">
-              <DialogTitle className="text-2xl font-semibold text-white">Мои проекты</DialogTitle>
-              <p className="text-sm text-slate-400">Черновики, деплой и клоакинг — всё под рукой.</p>
+              <DialogTitle className="text-2xl font-semibold text-white">My Projects</DialogTitle>
+              <p className="text-sm text-slate-400">Drafts, deploys, and cloaked versions in one place.</p>
             </DialogHeader>
 
             <div className="rounded-2xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-6">
@@ -2730,7 +2862,7 @@ export function SitePreview({
                   <div className="relative flex-1">
                     <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                     <Input
-                      placeholder="Поиск по названию или домену"
+                      placeholder="Search by name or domain"
                       value={projectsSearch}
                       onChange={(event) => setProjectsSearch(event.target.value)}
                       className="h-11 rounded-2xl border-white/10 bg-white/[0.04] pl-11 text-sm text-white placeholder:text-slate-500 focus-visible:border-sky-500/60 focus-visible:ring-sky-500/40"
@@ -2739,23 +2871,23 @@ export function SitePreview({
                   <div className="w-full sm:w-auto">
                     <Select value={projectsSort} onValueChange={(value) => setProjectsSort(value as typeof projectsSort)}>
                       <SelectTrigger className="h-11 w-full rounded-2xl border-white/10 bg-white/[0.04] text-sm text-white sm:w-48">
-                        <SelectValue placeholder="Сортировка" />
+                        <SelectValue placeholder="Sort" />
                       </SelectTrigger>
                       <SelectContent className="border-white/10 bg-[#0f172a] text-slate-100">
-                        <SelectItem value="recent">По обновлению</SelectItem>
-                        <SelectItem value="name">По названию</SelectItem>
-                        <SelectItem value="status">По статусу</SelectItem>
+                        <SelectItem value="recent">Latest updates</SelectItem>
+                        <SelectItem value="name">Alphabetical</SelectItem>
+                        <SelectItem value="status">By status</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
                 <Tabs value={projectsPreset} onValueChange={(value) => setProjectsPreset(value as ProjectStatusKey)}>
-                  <TabsList className="flex flex-wrap gap-2 rounded-xl border border-white/5 bg-white/5 p-2">
+                  <TabsList className="flex flex-wrap gap-2 rounded-full bg-transparent p-1 border border-transparent">
                     {PROJECT_STATUS_PRESETS.map((preset) => (
                       <TabsTrigger
                         key={preset.key}
                         value={preset.key}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2 text-xs font-medium text-slate-200 transition data-[state=active]:border-sky-400/50 data-[state=active]:bg-sky-400/10 data-[state=active]:text-white sm:flex-none"
+                        className="group relative flex flex-1 items-center justify-center gap-2 rounded-full border border-transparent px-4 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/[0.08] data-[state=active]:border-sky-400/70 data-[state=active]:bg-sky-400/15 data-[state=active]:text-white sm:flex-none"
                       >
                         {PROJECT_STATUS_STYLES[preset.key].icon}
                         <span>{PROJECT_STATUS_STYLES[preset.key].label}</span>
@@ -2777,16 +2909,19 @@ export function SitePreview({
                     <Loader2 className="h-5 w-5 animate-spin" />
                   </div>
                 ) : paginatedProjects.length === 0 ? (
-                  <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-sm text-slate-400">
-                    Пока нет проектов в этой вкладке.
+                  <div className="mx-auto max-w-md rounded-2xl border border-white/10 bg-white/[0.02] p-8 text-center text-sm text-slate-300 shadow-[0_20px_45px_rgba(8,15,35,0.35)]">
+                    No projects match this view yet.
                   </div>
                 ) : (
                   <div className="grid gap-4 md:grid-cols-2">
-                    {paginatedProjects.map((project) => (
-                      <div
-                        key={project.id}
-                        className="group relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-5 shadow-lg transition-transform duration-200 hover:-translate-y-1 hover:border-sky-400/50"
-                      >
+                    {paginatedProjects.map((project) => {
+                      const domain = deriveProjectDomain(project);
+                      const liveUrl = domain ? toExternalUrl(domain) : null;
+                      return (
+                        <div
+                          key={project.id}
+                          className="group relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-5 shadow-lg transition-transform duration-200 hover:-translate-y-1 hover:border-sky-400/50"
+                        >
                         <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:[background:radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_55%)]" />
                         <div className="relative flex flex-col gap-5">
                           <div className="flex items-start justify-between gap-3">
@@ -2803,13 +2938,13 @@ export function SitePreview({
                           </div>
                           <div className="space-y-1 text-xs text-slate-400">
                             <div className="flex items-center justify-between">
-                              <span>Обновлено</span>
+                                <span>Updated</span>
                               <span>{new Date(project.updated_at).toLocaleString()}</span>
                             </div>
-                            {project.meta?.domain ? (
+                            {domain ? (
                               <div className="flex items-center justify-between">
-                                <span>Домен</span>
-                                <span className="truncate text-slate-200">{String(project.meta.domain)}</span>
+                                <span>Domain</span>
+                                <span className="truncate text-slate-200">{domain}</span>
                               </div>
                             ) : null}
                           </div>
@@ -2820,17 +2955,17 @@ export function SitePreview({
                                 className="rounded-xl bg-sky-500/90 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-sky-400"
                                 onClick={() => handleProjectOpen(project)}
                               >
-                                Открыть
+                                Open
                               </Button>
-                              {project.meta?.domain ? (
+                              {liveUrl ? (
                                 <Button
                                   asChild
                                   variant="ghost"
                                   size="sm"
                                   className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
                                 >
-                                  <a href={`https://${project.meta.domain}`} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink className="mr-1 h-4 w-4" /> В продакшн
+                                  <a href={liveUrl} target="_blank" rel="noopener noreferrer">
+                                    <ExternalLink className="mr-1 h-4 w-4" /> View live
                                   </a>
                                 </Button>
                               ) : null}
@@ -2841,19 +2976,20 @@ export function SitePreview({
                               className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-rose-200 hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
                               onClick={() => setProjectsDeleteTarget(project)}
                             >
-                              <Trash2 className="mr-1 h-4 w-4" /> Удалить
+                              <Trash2 className="mr-1 h-4 w-4" /> Delete
                             </Button>
                           </div>
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                   </div>
                 )}
 
                 {!projectsLoading && paginatedProjects.length > 0 ? (
-                  <div className="flex flex-col items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[11px] text-slate-400 sm:flex-row">
+                  <div className="mx-auto flex max-w-3xl flex-col items-center justify-between gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 text-[11px] text-slate-400 sm:flex-row">
                     <div>
-                      Страница {projectsCurrentPage} из {projectsTotalPages} • {filteredProjects.length} проектов
+                      Page {projectsCurrentPage} of {projectsTotalPages} • {filteredProjects.length} projects
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -2863,7 +2999,7 @@ export function SitePreview({
                         onClick={() => setProjectsPage((prev) => Math.max(1, prev - 1))}
                         disabled={projectsCurrentPage === 1}
                       >
-                        <ChevronLeft className="mr-1 h-4 w-4" />Назад
+                        <ChevronLeft className="mr-1 h-4 w-4" />Prev
                       </Button>
                       <Button
                         variant="ghost"
@@ -2872,7 +3008,7 @@ export function SitePreview({
                         onClick={() => setProjectsPage((prev) => Math.min(projectsTotalPages, prev + 1))}
                         disabled={projectsCurrentPage === projectsTotalPages}
                       >
-                        Далее<ChevronRight className="ml-1 h-4 w-4" />
+                        Next<ChevronRight className="ml-1 h-4 w-4" />
                       </Button>
                     </div>
                   </div>
@@ -2880,10 +3016,10 @@ export function SitePreview({
 
                 {projectsPreset === 'deploy' && !projectsLoading ? (
                   <div className="space-y-3">
-                    <h3 className="text-sm font-semibold text-slate-200">Развернутые сайты</h3>
+                  <h3 className="text-sm font-semibold text-slate-200">Deployed sites</h3>
                     {deployedSites.length === 0 ? (
                       <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-xs text-slate-400">
-                        Пока нет записей о деплое.
+                        No deployments yet.
                       </div>
                     ) : (
                       <div className="space-y-2">
@@ -2928,20 +3064,20 @@ export function SitePreview({
       >
         <AlertDialogContent className="border-white/10 bg-[#0b1120] text-slate-100">
           <AlertDialogHeader>
-            <AlertDialogTitle>Удалить проект?</AlertDialogTitle>
+            <AlertDialogTitle>Delete project?</AlertDialogTitle>
             <AlertDialogDescription>
-              Это действие навсегда удалит «{projectsDeleteTarget?.name}» и связанные файлы.
+              This action permanently removes “{projectsDeleteTarget?.name}” and related files.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={projectsDeletePending}>Отмена</AlertDialogCancel>
+            <AlertDialogCancel disabled={projectsDeletePending}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleProjectDelete}
               disabled={projectsDeletePending}
               className="bg-rose-500 text-white hover:bg-rose-600"
             >
               {projectsDeletePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Удалить
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -3322,25 +3458,33 @@ export function SitePreview({
                       const timestamp = formatTimestamp(msg.createdAt);
                       const contextLabel = msg.file ? msg.file : 'Whole Project';
                       const isAi = msg.sender === 'ai';
+                      const isPending = !!msg.pending;
                       return (
-                        <div key={index} className={`flex gap-3 ${isAi ? '' : 'justify-end'}`}>
+                        <div key={msg.id ?? index} className={`flex gap-3 ${isAi ? '' : 'justify-end'}`}>
                           {isAi && (
                             <div className="h-7 w-7 rounded-full bg-gradient-to-br from-primary/30 to-primary/5 text-primary flex items-center justify-center border border-primary/40">
-                              <Sparkles className="h-4 w-4" />
+                              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                             </div>
                           )}
                           <div className="max-w-xs w-full">
-                            <div className={`group rounded-2xl border px-3 py-3 text-sm transition ${isAi ? 'border-[#2d313c] bg-[#16171c] text-[#e7e9f3] shadow-[0_8px_24px_rgba(10,10,25,0.32)]' : 'border-primary/30 bg-primary/20 text-white shadow-[0_8px_24px_rgba(80,56,237,0.32)]'}`}>
+                            <div className={`group rounded-2xl border px-3 py-3 text-sm transition ${isAi ? 'border-[#2d313c] bg-[#16171c] text-[#e7e9f3] shadow-[0_8px_24px_rgba(10,10,25,0.32)]' : 'border-primary/30 bg-primary/20 text-white shadow-[0_8px_24px_rgba(80,56,237,0.32)]'} ${isPending ? 'opacity-90' : ''}`}>
                               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.08em]">
                                 <span className={`font-semibold ${isAi ? 'text-[#aab0c7]' : 'text-white/80'}`}>
-                                  {isAi ? 'AI · Edited' : 'You · Editing'} — {contextLabel}
+                                  {isAi ? (isPending ? 'AI · Working' : 'AI · Edited') : 'You · Editing'} — {contextLabel}
                                 </span>
                                 <span className={isAi ? 'text-[#7a8193]' : 'text-white/70'}>{timestamp}</span>
                               </div>
-                              {msg.text && (
-                                <p className={`mt-3 whitespace-pre-wrap leading-6 ${isAi ? 'text-[#eceff8]' : 'text-white'}`}>{msg.text}</p>
+                              {isPending ? (
+                                <div className="mt-3 flex items-center gap-2 text-[12px] text-[#aab0c7]">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>AI is crafting the update...</span>
+                                </div>
+                              ) : (
+                                msg.text && (
+                                  <p className={`mt-3 whitespace-pre-wrap leading-6 ${isAi ? 'text-[#eceff8]' : 'text-white'}`}>{msg.text}</p>
+                                )
                               )}
-                              {msg.diff && (
+                              {!isPending && msg.diff && (
                                 <div className="mt-4 rounded-xl border border-[#2b2e35] bg-gradient-to-br from-[#181920] to-[#121218] p-2.5">
                                   <div className="flex items-center justify-between text-[10px] text-[#c1c6d8]">
                                     <span>{msg.file}</span>
@@ -3350,14 +3494,22 @@ export function SitePreview({
                                     </div>
                                   </div>
                                   <div className="mt-2 flex items-center gap-1.5 text-[11px]">
-                                    <Button variant="outline" size="sm" className="h-6 rounded-lg border-[#343743] px-2 text-[11px] text-[#d5d9ec] hover:bg-[#262832]"
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-6 rounded-lg border-[#343743] px-2 text-[11px] text-[#d5d9ec] hover:bg-[#262832]"
                                       onClick={() => {
                                         const revs = revisions[msg.file || ''] || [];
                                         const last = revs[revs.length - 1];
                                         if (last) setDiffView({ file: msg.file || '', before: last.before, after: last.after });
                                       }}
-                                    >View</Button>
-                                    <Button variant="ghost" size="sm" className="h-6 rounded-lg px-2 text-[11px] text-[#aab0c7] hover:text-white"
+                                    >
+                                      View
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 rounded-lg px-2 text-[11px] text-[#aab0c7] hover:text-white"
                                       onClick={() => {
                                         const f = msg.file || '';
                                         const list = revisions[f] || [];
@@ -3367,11 +3519,13 @@ export function SitePreview({
                                         pushRevision(f, last.after, last.before, last.removed, last.added);
                                         toast({ title: 'Restored', description: `Reverted changes in ${f}` });
                                       }}
-                                    >Restore</Button>
+                                    >
+                                      Restore
+                                    </Button>
                                   </div>
                                 </div>
                               )}
-                              {msg.diffs && (
+                              {!isPending && msg.diffs && (
                                 <div className="mt-4 rounded-xl border border-[#2b2e35] bg-gradient-to-br from-[#16161d] to-[#101015] p-2.5 space-y-2.5">
                                   {msg.diffs.map((d, i) => (
                                     <div key={i} className="flex items-center justify-between gap-2 text-[11px] text-[#d4d7e5]">
@@ -3383,14 +3537,22 @@ export function SitePreview({
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-1">
-                                        <Button variant="outline" size="sm" className="h-6 rounded-lg border-[#343743] px-2 text-[11px] text-[#d5d9ec] hover:bg-[#262832]"
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="h-6 rounded-lg border-[#343743] px-2 text-[11px] text-[#d5d9ec] hover:bg-[#262832]"
                                           onClick={() => {
                                             const revs = revisions[d.file] || [];
                                             const last = revs[revs.length - 1];
                                             if (last) setDiffView({ file: d.file, before: last.before, after: last.after });
                                           }}
-                                        >View</Button>
-                                        <Button variant="ghost" size="sm" className="h-6 rounded-lg px-2 text-[11px] text-[#aab0c7] hover:text-white"
+                                        >
+                                          View
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          className="h-6 rounded-lg px-2 text-[11px] text-[#aab0c7] hover:text-white"
                                           onClick={() => {
                                             const list = revisions[d.file] || [];
                                             const last = list[list.length - 1];
@@ -3399,7 +3561,9 @@ export function SitePreview({
                                             pushRevision(d.file, last.after, last.before, last.removed, last.added);
                                             toast({ title: 'Restored', description: `Reverted changes in ${d.file}` });
                                           }}
-                                        >Restore</Button>
+                                        >
+                                          Restore
+                                        </Button>
                                       </div>
                                     </div>
                                   ))}
@@ -3481,7 +3645,15 @@ export function SitePreview({
                     if (filesPayloadInput) {
                       filesPayloadInput.value = JSON.stringify({ files: candidates });
                     }
-                    setChatHistory((prev) => [...prev, { sender: 'user', text: chatPrompt, file: 'Whole Project', createdAt: new Date().toISOString() }]);
+                    const userMessageId = generateMessageId();
+                    const placeholderId = generateMessageId();
+                    const createdAt = new Date().toISOString();
+                    setChatHistory((prev) => [
+                      ...prev,
+                      { id: userMessageId, sender: 'user', text: chatPrompt, file: 'Whole Project', createdAt },
+                      createPendingAiMessage(placeholderId, 'Whole Project'),
+                    ]);
+                    pendingAiMessageIdsRef.current.bulk = placeholderId;
                     setChatPrompt('');
                   } else {
                     // Remember which file is being edited at submission time.
@@ -3536,7 +3708,7 @@ export function SitePreview({
 
       {/* Footer */}
       <footer className="flex items-center justify-center h-10 text-xs text-[#9da5b4] px-3 shrink-0">
-        Разработано студией <span className="mx-1 font-semibold text-[#c5c5c5]">Web‑Impuls</span>
+        Crafted by <span className="mx-1 font-semibold text-[#c5c5c5]">Web‑Impuls</span>
       </footer>
 
       {/* Modals for Add File/Folder */}
@@ -3597,7 +3769,7 @@ export function SitePreview({
                 }}
                 autoComplete="off"
               />
-              <p className="text-xs text-[#9da5b4]">Можно указать как основной домен (mysite.com), так и поддомен (app.example.com). Мы подставим нужные параметры автоматически.</p>
+              <p className="text-xs text-[#9da5b4]">You can supply either a root domain (mysite.com) or a subdomain (app.example.com). We will inject the proper parameters automatically.</p>
             </div>
 
             <div className="grid grid-cols-1 gap-3">
@@ -3608,7 +3780,7 @@ export function SitePreview({
                 onChange={(e) => setDocRoot(e.target.value)}
                 autoComplete="off"
               />
-              <p className="text-xs text-[#9da5b4]">Путь как в вашей схеме: /website/домен. Папка создастся при необходимости.</p>
+              <p className="text-xs text-[#9da5b4]">Follow your structure, e.g. /website/domain. The folder is created automatically if needed.</p>
             </div>
 
             <div className="flex items-center justify-between gap-2 pt-2">

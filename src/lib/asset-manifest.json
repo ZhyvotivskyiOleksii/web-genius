@@ -694,5 +694,11 @@
     "Farm-Slot",
     "Gems-Slot",
     "Slot-Pan"
+  ],
+  "favicons": [
+    "images/favicon/free-icon-3d-dice.png",
+    "images/favicon/free-icon-dice.png",
+    "images/favicon/free-icon.png",
+    "images/favicon/play-7477009.png"
   ]
 }

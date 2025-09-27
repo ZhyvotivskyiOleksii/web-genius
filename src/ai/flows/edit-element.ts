@@ -38,8 +38,12 @@ const editElementPrompt = ai.definePrompt({
 - Preserve existing ids, classes, and accessibility attributes unless the prompt requires otherwise.
 - Do not modify anything outside of the provided element. Parents, siblings, and other parts of the document must remain unchanged.
 - Maintain indentation that matches the input (two spaces per level) and include the full element markup.
-- If you need to adjust shared styles, return the COMPLETE updated CSS file in the \\"css\\" field. Otherwise omit the field.
+- Keep navigation/menu structures intact: do not remove or reorder existing nav links and always preserve classes that control menu visibility (for example "mobile-nav-hidden", "mobile-nav-visible", "burger-icon", "brand-badge").
+- When updating a logo or icon, swap the graphic inside the existing container instead of adding new wrapper elements or altering surrounding layout.
+- Preserve any existing anchor tags around the logo so it remains clickable and continues to link to the homepage or original target.
+- If you need to adjust shared styles, return the COMPLETE updated CSS file in the \"css\" field. Otherwise omit the field.
 - Keep every unrelated CSS rule identical; only touch declarations that are required for the requested change.
+- Write the reasoning in the same language as the user's prompt. Detect Ukrainian, Russian, Polish, or English automatically and stay consistent.
 - Never wrap the response in markdown. Respond using the output schema.
 
 Input HTML:

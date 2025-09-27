@@ -1,7 +1,276 @@
 // File: src/lib/templates.ts
 
+export type BrandingTheme = {
+  id: string;
+  mode: 'light' | 'dark';
+  bodyClass: string;
+  headerClass: string;
+  navLinkClass: string;
+  navActiveClass: string;
+  menuToggleClass: string;
+  mobileNavClass: string;
+  mobileNavLinkClass: string;
+  mobileNavActiveClass: string;
+  gameLinkClass: string;
+  gameActiveClass: string;
+  mobileGameLinkClass: string;
+  mobileGameActiveClass: string;
+  footerClass: string;
+  footerTextClass: string;
+  cookieBannerClass: string;
+  cookieTextClass: string;
+  cookieButtonClass: string;
+  brandBadgeClass: string;
+  logoGradient: string;
+  styleBlock: string;
+};
+
+export type BrandVisual = {
+  primaryIcon: string;
+  secondaryIcon?: string;
+};
+
+const defaultBrandVisual: BrandVisual = {
+  primaryIcon: 'star',
+  secondaryIcon: 'spark',
+};
+
+const fallbackTheme: BrandingTheme = {
+  id: 'default-dark',
+  mode: 'dark',
+  bodyClass: 'font-sans text-gray-200 bg-slate-900',
+  headerClass: 'bg-slate-900/80 backdrop-blur-sm',
+  navLinkClass: 'text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors',
+  navActiveClass: 'text-white bg-white/10 shadow-sm',
+  menuToggleClass: 'p-2 inline-flex items-center justify-center rounded-md text-gray-400 hover:text-white focus:outline-none',
+  mobileNavClass: 'mobile-nav-base mobile-nav-hidden bg-slate-900/95 text-gray-200',
+  mobileNavLinkClass: 'text-gray-300 hover:text-white text-3xl font-bold',
+  mobileNavActiveClass: 'text-white',
+  gameLinkClass: 'text-indigo-400 font-bold hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm transition-colors',
+  gameActiveClass: 'ring-2 ring-indigo-300/70 ring-offset-2 ring-offset-slate-900',
+  mobileGameLinkClass: 'text-indigo-300 hover:text-white text-3xl font-bold',
+  mobileGameActiveClass: 'text-white',
+  footerClass: 'bg-slate-800',
+  footerTextClass: 'text-gray-400',
+  cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-slate-800/90 backdrop-blur-sm p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out',
+  cookieTextClass: 'text-sm text-gray-300',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-500 transition',
+  brandBadgeClass: 'bg-white/10 text-white',
+  logoGradient: 'linear-gradient(90deg, #7f5af0 0%, #5a31f0 50%, #0ea5e9 100%)',
+  styleBlock: '.brand-title { background: linear-gradient(90deg,#7f5af0,#5a31f0,#0ea5e9); -webkit-background-clip: text; color: transparent; background-clip: text; }',
+};
+
+function resolveTheme(theme?: BrandingTheme): BrandingTheme {
+  return theme ?? fallbackTheme;
+}
+
+function resolveBrandVisual(visual?: BrandVisual): BrandVisual {
+  if (!visual) return defaultBrandVisual;
+  return {
+    primaryIcon: visual.primaryIcon || defaultBrandVisual.primaryIcon,
+    secondaryIcon: visual.secondaryIcon || defaultBrandVisual.secondaryIcon,
+  };
+}
+
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function formatBrandTitle(rawTitle: string): string {
+  const fallback = 'My Website';
+  if (!rawTitle) {
+    return fallback;
+  }
+
+  const trimmed = rawTitle.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const withoutProtocol = trimmed.replace(/^https?:\/\//i, '').replace(/\/.*/, '');
+  const candidate = withoutProtocol || trimmed;
+  const domainSlice = candidate.includes('.') ? candidate.split('.')[0] : candidate;
+  const cleaned = domainSlice
+    .replace(/[^a-z0-9\s\-_/]/gi, ' ')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned) {
+    return fallback;
+  }
+
+  return cleaned
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+type PageContext = 'index' | 'game' | 'policy';
+
+type NavItem = {
+  href: string;
+  label: string;
+  active?: boolean;
+  type?: 'game' | 'default';
+};
+
+function buildNavItems(currentPage: PageContext, websiteTypes: string[]): NavItem[] {
+  const hasGame = websiteTypes.includes('Game');
+  const items: NavItem[] = [];
+  items.push({ href: 'index.html', label: 'Home', active: currentPage === 'index' });
+  if (hasGame) {
+    items.push({ href: 'game.html', label: 'Play Game!', active: currentPage === 'game', type: 'game' });
+  }
+  const featuresHref = currentPage === 'index' ? '#features' : 'index.html#features';
+  items.push({ href: featuresHref, label: 'Features' });
+  const contactHref = currentPage === 'index' ? '#contact' : 'index.html#contact';
+  items.push({ href: contactHref, label: 'Contact' });
+  items.push({ href: 'privacy-policy.html', label: 'Privacy', active: currentPage === 'policy' });
+  return items;
+}
+
+function renderLogo(title: string, theme: BrandingTheme, brandVisual: BrandVisual): string {
+  const displayTitle = formatBrandTitle(title);
+  const titleAttr = escapeHtmlAttribute(title || displayTitle);
+  const displayText = escapeHtmlText(displayTitle);
+  const initials = displayText
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0))
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+  const primaryIconSvg = renderSvgIcon(brandVisual.primaryIcon, 'brand-icon-main');
+  const secondaryIconSvg = brandVisual.secondaryIcon ? renderSvgIcon(brandVisual.secondaryIcon, 'brand-icon-secondary') : '';
+  return `
+    <a href="index.html" class="flex items-center gap-3 text-xl font-bold">
+      <span class="brand-badge flex h-11 w-11 items-center justify-center rounded-2xl relative overflow-hidden ${theme.brandBadgeClass}">
+        <span class="brand-initials" aria-hidden="true">${initials}</span>
+        ${primaryIconSvg}
+        ${secondaryIconSvg}
+      </span>
+      <span class="brand-title" title="${titleAttr}">${displayText}</span>
+    </a>`;
+}
+
+function renderDesktopNav(theme: BrandingTheme, items: NavItem[]): string {
+  return items
+    .map((item) => {
+      const baseClass = item.type === 'game' ? theme.gameLinkClass : theme.navLinkClass;
+      const activeClass = item.active
+        ? item.type === 'game'
+          ? ` ${theme.gameActiveClass}`
+          : ` ${theme.navActiveClass}`
+        : '';
+      return `<a href="${item.href}" class="${baseClass}${activeClass}">${item.label}</a>`;
+    })
+    .join('\n');
+}
+
+function renderMobileNav(theme: BrandingTheme, items: NavItem[]): string {
+  return items
+    .map((item) => {
+      const baseClass = item.type === 'game' ? theme.mobileGameLinkClass : theme.mobileNavLinkClass;
+      const activeClass = item.active
+        ? item.type === 'game'
+          ? ` ${theme.mobileGameActiveClass}`
+          : ` ${theme.mobileNavActiveClass}`
+        : '';
+      return `<a href="${item.href}" class="${baseClass}${activeClass}">${item.label}</a>`;
+    })
+    .join('\n');
+}
+
+function renderHeader(
+  title: string,
+  theme: BrandingTheme,
+  websiteTypes: string[],
+  brandVisual: BrandVisual,
+  currentPage: PageContext
+): string {
+  const items = buildNavItems(currentPage, websiteTypes);
+  return `
+    <header id="header" class="${theme.headerClass} fixed top-0 left-0 right-0 z-40 transition-shadow duration-300">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex items-center justify-between h-16">
+          ${renderLogo(title, theme, brandVisual)}
+          <nav class="hidden md:block">
+            <div class="ml-10 flex items-baseline space-x-4">
+              ${renderDesktopNav(theme, items)}
+            </div>
+          </nav>
+          <div class="-mr-2 flex md:hidden">
+            <button type="button" id="burger-menu" class="${theme.menuToggleClass}" aria-expanded="false" aria-controls="mobile-nav">
+              <span class="sr-only">Toggle main menu</span>
+              <span id="burger-icon" class="burger-icon" aria-hidden="true">
+                <span class="burger-line"></span>
+                <span class="burger-line"></span>
+                <span class="burger-line"></span>
+              </span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+    <div id="mobile-nav" class="${theme.mobileNavClass}">
+      <nav class="flex flex-col items-center justify-center h-full gap-y-8">
+        ${renderMobileNav(theme, items)}
+      </nav>
+    </div>
+  `;
+}
+
+function renderFooter(title: string, theme: BrandingTheme): string {
+  return `
+    <footer class="${theme.footerClass}">
+      <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 text-center ${theme.footerTextClass}">
+        <p>&copy; ${new Date().getFullYear()} ${title}. All rights reserved.</p>
+        <a href="privacy-policy.html" class="text-sm hover:text-indigo-400">Privacy Policy</a>
+      </div>
+    </footer>
+  `;
+}
+
+function renderCookieBanner(theme: BrandingTheme): string {
+  return `
+    <div id="cookie-banner" class="${theme.cookieBannerClass}">
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+        <p class="${theme.cookieTextClass}">We use cookies to enhance your experience. By accepting, you agree to our use of cookies.</p>
+        <button id="accept-cookies" class="${theme.cookieButtonClass}">Accept</button>
+      </div>
+    </div>
+  `;
+}
+
 // Цей шаблон залишається без змін, він головний
-export const getIndexHtmlTemplate = (title: string, allSectionsHtml: string, websiteTypes: string[] = []) => `
+export const getIndexHtmlTemplate = (
+  title: string,
+  allSectionsHtml: string,
+  websiteTypes: string[] = [],
+  theme?: BrandingTheme,
+  brandVisual?: BrandVisual,
+  faviconPath?: string
+) => {
+  const appliedTheme = resolveTheme(theme);
+  const brandGlyph = resolveBrandVisual(brandVisual);
+  const hasGame = websiteTypes.includes('Game');
+  const faviconTag = faviconPath
+    ? `<link rel="icon" type="image/png" href="${faviconPath}">`
+    : '';
+  return `
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
 <head>
@@ -13,65 +282,57 @@ export const getIndexHtmlTemplate = (title: string, allSectionsHtml: string, web
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkfQKb4Z1Z8S+9C0Q5K5jEJQWv5GqQKZ0fZkqG6Yc4nV7YhZ+YB+mwkDw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="styles/style.css">
+    ${faviconTag}
+    <style>
+      ${appliedTheme.styleBlock}
+    </style>
 </head>
-<body class="bg-slate-900 text-gray-200 font-sans">
-    <header id="header" class="bg-slate-900/80 backdrop-blur-sm fixed top-0 left-0 right-0 z-40 transition-shadow duration-300">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <a href="index.html" class="text-white font-bold text-xl">${title}</a>
-                <nav class="hidden md:block">
-                    <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="index.html" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Home</a>
-                        ${websiteTypes.includes('Game') ? '<a href="game.html" class="text-indigo-400 font-bold hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm">Play Game!</a>' : ''}
-                        <a href="#features" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Features</a>
-                        <a href="#contact" class="text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium">Contact</a>
-                    </div>
-                </nav>
-                <div class="-mr-2 flex md:hidden">
-                    <button type="button" id="burger-menu" class="p-2 inline-flex items-center justify-center rounded-md text-gray-400 hover:text-white focus:outline-none">
-                        <span class="sr-only">Open main menu</span>
-                        <i id="burger-icon" class="fas fa-bars text-xl"></i>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </header>
-    
-    <div id="mobile-nav" class="mobile-nav-hidden">
-        <nav class="flex flex-col items-center justify-center h-full gap-y-8">
-            <a href="index.html" class="text-gray-300 hover:text-white text-3xl font-bold">Home</a>
-            ${websiteTypes.includes('Game') ? '<a href="game.html" class="text-indigo-400 hover:text-white text-3xl font-bold">Play Game!</a>' : ''}
-            <a href="#features" class="text-gray-300 hover:text-white text-3xl font-bold">Features</a>
-            <a href="#contact" class="text-gray-300 hover:text-white text-3xl font-bold">Contact</a>
-        </nav>
-    </div>
+<body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="index">
+    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index')}
 
     <main class="pt-16">
         ${allSectionsHtml}
     </main>
 
-    <footer class="bg-slate-800">
-        <div class="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8 text-center text-gray-400">
-            <p>&copy; ${new Date().getFullYear()} ${title}. All rights reserved.</p>
-            <a href="privacy-policy.html" class="text-sm hover:text-indigo-400">Privacy Policy</a>
-        </div>
-    </footer>
+    ${renderFooter(title, appliedTheme)}
 
-    <div id="cookie-banner" class="fixed bottom-0 left-0 right-0 bg-slate-800/90 backdrop-blur-sm p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out">
-      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-        <p class="text-sm text-gray-300">We use cookies to enhance your experience. By accepting, you agree to our use of cookies.</p>
-        <button id="accept-cookies" class="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-500 transition">Accept</button>
-      </div>
-    </div>
+    ${renderCookieBanner(appliedTheme)}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
     <script src="scripts/main.js"></script>
 </body>
 </html>
 `;
+};
 
 // Оновлено: шаблон для ігрової сторінки
-export const getGamePageTemplate = (title: string, gamePageTitle: string, gameIframePath: string, disclaimerHtml: string) => `
+export const getGamePageTemplate = (
+  title: string,
+  gamePageTitle: string,
+  gameIframePath: string,
+  disclaimerHtml: string,
+  theme?: BrandingTheme,
+  brandVisual?: BrandVisual,
+  websiteTypes: string[] = [],
+  faviconPath?: string
+) => {
+  const appliedTheme = resolveTheme(theme);
+  const brandGlyph = resolveBrandVisual(brandVisual);
+  const faviconTag = faviconPath
+    ? `<link rel="icon" type="image/png" href="${faviconPath}">`
+    : '';
+  const headingClass = appliedTheme.mode === 'light' ? 'text-[#1f2440]' : 'text-white';
+  const textClass = appliedTheme.mode === 'light' ? 'text-[#3b456a]' : 'text-gray-200/90';
+  const frameWrapperClass = appliedTheme.mode === 'light'
+    ? 'w-full max-w-5xl aspect-video bg-white/90 rounded-2xl shadow-[0_20px_50px_rgba(120,130,255,0.25)] border border-[#dbe2ff]'
+    : 'w-full max-w-5xl aspect-video bg-black/70 rounded-2xl shadow-[0_32px_60px_rgba(30,10,90,0.55)] border border-white/10';
+  const disclaimerBoxClass = appliedTheme.mode === 'light'
+    ? 'mt-8 w-full max-w-5xl rounded-2xl border border-[#dbe2ff] bg-white/95 p-6 shadow-[0_16px_40px_rgba(115,120,255,0.15)]'
+    : 'mt-8 w-full max-w-5xl rounded-2xl border border-white/10 bg-white/5 p-6 shadow-[0_24px_50px_rgba(10,5,40,0.6)] backdrop-blur';
+  const backButtonClass = appliedTheme.mode === 'light'
+    ? 'inline-flex items-center gap-2 rounded-xl bg-white text-[#1f2440] px-4 py-2 text-sm font-semibold shadow hover:bg-white/90 transition'
+    : 'inline-flex items-center gap-2 rounded-xl bg-white/10 text-white px-4 py-2 text-sm font-semibold hover:bg-white/15 transition';
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -82,39 +343,70 @@ export const getGamePageTemplate = (title: string, gamePageTitle: string, gameIf
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="styles/style.css">
+    ${faviconTag}
+    <style>
+      ${appliedTheme.styleBlock}
+    </style>
 </head>
-<body class="bg-slate-900 text-gray-200 font-sans flex flex-col min-h-screen">
-    
-
+<body class="${appliedTheme.bodyClass}" data-has-game="true" data-page="game">
+    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game')}
 
     <main class="flex-grow flex flex-col items-center justify-center p-4">
-        <h1 class="text-3xl md:text-5xl font-bold text-center text-white mb-6">${gamePageTitle}</h1>
-        <div class="w-full max-w-5xl aspect-video bg-black rounded-lg shadow-2xl overflow-hidden border-2 border-slate-700">
-            <iframe src="${gameIframePath}" frameborder="0" class="w-full h-full"></iframe>
+        <h1 class="${headingClass} text-3xl md:text-5xl font-bold text-center mb-6">${gamePageTitle}</h1>
+        <div class="${frameWrapperClass}">
+            <iframe src="${gameIframePath}" frameborder="0" class="w-full h-full rounded-[18px]"></iframe>
         </div>
-        <div class="mt-8 w-full max-w-5xl">
+        <div class="${disclaimerBoxClass} ${textClass}">
             ${disclaimerHtml}
+        </div>
+        <div class="mt-6">
+          <a href="index.html" class="${backButtonClass}"><i class="fa-solid fa-arrow-left"></i> Back to Home</a>
         </div>
     </main>
 
-  
-    <div id="cookie-banner" class="fixed bottom-0 left-0 right-0 bg-slate-800/90 backdrop-blur-sm p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out">
-      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-        <p class="text-sm text-gray-300">We use cookies to enhance your experience. By accepting, you agree to our use of cookies.</p>
-        <button id="accept-cookies" class="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-500 transition">Accept</button>
-      </div>
-    </div>
+    ${renderFooter(title, appliedTheme)}
+
+    ${renderCookieBanner(appliedTheme)}
     <script src="scripts/main.js"></script>
 </body>
 </html>
 `;
+};
 
 // Оновлено: шаблон для сторінки політики
-export const getPrivacyPolicyTemplate = (title: string, domain: string, policyContentHtml: string) => {
+export const getPrivacyPolicyTemplate = (
+  title: string,
+  domain: string,
+  policyContentHtml: string,
+  theme?: BrandingTheme,
+  brandVisual?: BrandVisual,
+  websiteTypes: string[] = [],
+  faviconPath?: string
+) => {
   const contactEmail = `contact@${domain}`;
   const menuItems = Array.from(policyContentHtml.matchAll(/<h2 id="([^"]+)"[^>]*>(.*?)<\/h2>/g))
     .map(match => ({ id: match[1], title: match[2] }));
-
+  const appliedTheme = resolveTheme(theme);
+  const brandGlyph = resolveBrandVisual(brandVisual);
+  const hasGame = websiteTypes.includes('Game');
+  const faviconTag = faviconPath
+    ? `<link rel="icon" type="image/png" href="${faviconPath}">`
+    : '';
+  const headingClass = appliedTheme.mode === 'light' ? 'text-[#1f2440]' : 'text-white';
+  const subheadingClass = appliedTheme.mode === 'light' ? 'text-[#384063]' : 'text-white';
+  const proseClass = appliedTheme.mode === 'light'
+    ? 'prose prose-slate lg:prose-lg max-w-none'
+    : 'prose prose-invert lg:prose-lg max-w-none';
+  const sidebarTitleClass = appliedTheme.mode === 'light' ? 'font-bold text-[#1f2440] mb-4' : 'font-bold text-white mb-4';
+  const sidebarLinkClass = appliedTheme.mode === 'light'
+    ? 'block text-[#566094] hover:text-[#1f2440] transition-colors duration-200'
+    : 'block text-gray-400 hover:text-indigo-400 transition-colors duration-200';
+  const contactLinkClass = appliedTheme.mode === 'light'
+    ? 'text-[#3a4fff] font-semibold hover:underline'
+    : 'text-indigo-400 font-semibold hover:underline';
+  const sidebarWrapperClass = appliedTheme.mode === 'light'
+    ? 'sticky top-24 rounded-2xl border border-[#dbe2ff] bg-white/90 p-6 shadow-[0_14px_36px_rgba(120,130,255,0.15)]'
+    : 'sticky top-24 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-[0_22px_45px_rgba(10,5,40,0.55)] backdrop-blur';
   return `
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
@@ -125,43 +417,42 @@ export const getPrivacyPolicyTemplate = (title: string, domain: string, policyCo
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles/style.css">
+    ${faviconTag}
+    <style>
+      ${appliedTheme.styleBlock}
+    </style>
 </head>
-<body class="bg-slate-900 text-gray-300 font-sans">
-    
-    
+<body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="policy">
+    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy')}
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-12">
-            <main class="md:col-span-3 prose prose-invert lg:prose-lg max-w-none">
-                <h1 class="text-4xl sm:text-5xl font-extrabold text-white !mb-8">Privacy Policy</h1>
+            <main class="md:col-span-3 ${proseClass}">
+                <h1 class="${headingClass} text-4xl sm:text-5xl font-extrabold !mb-8">Privacy Policy</h1>
                 ${policyContentHtml}
                 <section id="contact-us">
-                  <h2 id="contact" class="text-3xl font-bold text-white !mt-12 !mb-4">Contact Us</h2>
-                  <p>If you have any questions about this Privacy Policy, please contact us at: 
-                  <a href="mailto:${contactEmail}" class="text-indigo-400 font-semibold hover:underline">${contactEmail}</a></p>
+                  <h2 id="contact" class="${subheadingClass} text-3xl font-bold !mt-12 !mb-4">Contact Us</h2>
+                  <p>If you have any questions about this Privacy Policy, please contact us at:
+                  <a href="mailto:${contactEmail}" class="${contactLinkClass}">${contactEmail}</a></p>
                 </section>
             </main>
             <aside class="md:col-span-1">
-                <div class="sticky top-24">
-                    <h3 class="font-bold text-white mb-4">On this page</h3>
+                <div class="${sidebarWrapperClass}">
+                    <h3 class="${sidebarTitleClass}">On this page</h3>
                     <nav id="policy-nav">
                         <ul class="space-y-2">
-                            ${menuItems.map(item => `<li><a href="#${item.id}" class="block text-gray-400 hover:text-indigo-400 transition-colors duration-200" data-nav-link="${item.id}">${item.title}</a></li>`).join('\n')}
-                            <li><a href="#contact" class="block text-gray-400 hover:text-indigo-400 transition-colors duration-200" data-nav-link="contact">Contact Us</a></li>
+                            ${menuItems.map(item => `<li><a href="#${item.id}" class="${sidebarLinkClass}" data-nav-link="${item.id}">${item.title}</a></li>`).join('\n')}
+                            <li><a href="#contact" class="${sidebarLinkClass}" data-nav-link="contact">Contact Us</a></li>
                         </ul>
                     </nav>
                 </div>
             </aside>
         </div>
     </div>
-    
-    
-    <div id="cookie-banner" class="fixed bottom-0 left-0 right-0 bg-slate-800/90 backdrop-blur-sm p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out">
-      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-        <p class="text-sm text-gray-300">We use cookies to enhance your experience. By accepting, you agree to our use of cookies.</p>
-        <button id="accept-cookies" class="px-4 py-2 rounded-md bg-indigo-600 text-white hover:bg-indigo-500 transition">Accept</button>
-      </div>
-    </div>
+
+    ${renderFooter(title, appliedTheme)}
+
+    ${renderCookieBanner(appliedTheme)}
     <script src="scripts/main.js"></script>
 </body>
 </html>`;
@@ -174,18 +465,42 @@ document.addEventListener('DOMContentLoaded', function () {
     const burgerMenu = document.getElementById('burger-menu');
     const burgerIcon = document.getElementById('burger-icon');
     const mobileNav = document.getElementById('mobile-nav');
-    if (burgerMenu && mobileNav && burgerIcon) {
+    if (burgerMenu && mobileNav) {
+        let iconContainer = burgerIcon;
+        if (!iconContainer) {
+            iconContainer = document.createElement('span');
+            iconContainer.id = 'burger-icon';
+            iconContainer.className = 'burger-icon';
+            burgerMenu.appendChild(iconContainer);
+        }
+        if (iconContainer.children.length === 0) {
+            for (let i = 0; i < 3; i++) {
+                const line = document.createElement('span');
+                line.className = 'burger-line';
+                iconContainer.appendChild(line);
+            }
+        }
+
+        const orientations = ['top', 'right', 'left'];
+        const pickedOrientation = orientations[Math.floor(Math.random() * orientations.length)];
+        mobileNav.classList.add('mobile-nav-orientation-' + pickedOrientation);
+
         const toggleMenu = () => {
             const isNavOpen = mobileNav.classList.contains('mobile-nav-visible');
             mobileNav.classList.toggle('mobile-nav-visible', !isNavOpen);
             mobileNav.classList.toggle('mobile-nav-hidden', isNavOpen);
-            burgerIcon.classList.toggle('fa-bars', isNavOpen);
-            burgerIcon.classList.toggle('fa-times', !isNavOpen);
+            iconContainer.classList.toggle('is-open', !isNavOpen);
             document.body.classList.toggle('overflow-hidden', !isNavOpen);
+            burgerMenu.setAttribute('aria-expanded', String(!isNavOpen));
         };
+
         burgerMenu.addEventListener('click', toggleMenu);
         mobileNav.querySelectorAll('a').forEach(link => {
-            link.addEventListener('click', toggleMenu);
+            link.addEventListener('click', () => {
+                if (mobileNav.classList.contains('mobile-nav-visible')) {
+                    toggleMenu();
+                }
+            });
         });
     }
 
@@ -210,6 +525,69 @@ document.addEventListener('DOMContentLoaded', function () {
             localStorage.setItem(cookieName, 'true');
             hideBanner();
         }, { once: true });
+    }
+
+    // --- Auto-wire game CTAs ---
+    const hasGame = document.body.dataset.hasGame === 'true';
+    const currentPage = document.body.dataset.page || '';
+    if (hasGame && currentPage === 'index') {
+        const keywordMatch = (text) => {
+            if (!text) return false;
+            const lower = text.toLowerCase();
+            return ['play', 'demo', 'spin', 'start', 'launch', 'free'].some((token) => lower.includes(token));
+        };
+        const looksLikeButton = (el) => {
+            const rawClass = el && typeof el.className === 'object' && el.className && 'baseVal' in el.className
+                ? el.className.baseVal
+                : (el.className || '');
+            const className = rawClass.toString().toLowerCase();
+            const role = (el.getAttribute && el.getAttribute('role')) || '';
+            if (role === 'button') return true;
+            return ['btn', 'button', 'cta', 'pill', 'primary'].some((token) => className.includes(token));
+        };
+        const shouldSkipAnchor = (anchor) => {
+            if (!anchor) return true;
+            if (anchor.dataset.skipGame === 'true') return true;
+            const href = anchor.getAttribute('href') || '';
+            if (!href) return false;
+            if (href.startsWith('#')) return true;
+            const lowered = href.toLowerCase();
+            if (lowered.includes('privacy') || lowered.includes('terms') || lowered.includes('policy') || lowered.includes('responsible')) return true;
+            if (lowered.startsWith('mailto:') || lowered.startsWith('tel:')) return true;
+            if (anchor.hasAttribute('download')) return true;
+            if (anchor.closest('nav')) return true;
+            return false;
+        };
+
+        document.querySelectorAll('a').forEach((anchor) => {
+            if (shouldSkipAnchor(anchor)) return;
+            if (!looksLikeButton(anchor) && !keywordMatch(anchor.textContent)) return;
+            anchor.href = 'game.html';
+            anchor.target = '_self';
+            anchor.dataset.gameCta = 'true';
+            anchor.addEventListener('click', (event) => {
+                event.preventDefault();
+                window.location.href = 'game.html';
+            });
+        });
+
+        const shouldSkipButton = (button) => {
+            if (!button) return true;
+            if (button.dataset.skipGame === 'true') return true;
+            if (button.id === 'accept-cookies') return true;
+            if (button.id === 'burger-menu') return true;
+            if (button.closest('#cookie-banner')) return true;
+            return false;
+        };
+
+        document.querySelectorAll('button').forEach((button) => {
+            if (shouldSkipButton(button)) return;
+            button.dataset.gameCta = 'true';
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                window.location.href = 'game.html';
+            });
+        });
     }
 
     // --- Smooth Scroll for Anchor Links ---
@@ -263,21 +641,167 @@ document.addEventListener('DOMContentLoaded', function () {
 
 export const stylesCssTemplate = `
 body.overflow-hidden { overflow: hidden; }
-.mobile-nav-hidden {
+.mobile-nav-base {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100vh;
-    background-color: rgba(15, 23, 42, 0.98);
-    backdrop-filter: blur(8px);
     z-index: 30;
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 4rem 1.25rem;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.3s ease-in-out;
+    transform: translate3d(0,-100%,0);
+    transition: opacity 0.35s ease, transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
-.mobile-nav-visible { opacity: 1; pointer-events: auto; }
+.mobile-nav-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate3d(0,0,0);
+}
+.mobile-nav-hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+.mobile-nav-orientation-top.mobile-nav-hidden { transform: translate3d(0,-100%,0); }
+.mobile-nav-orientation-right.mobile-nav-hidden { transform: translate3d(100%,0,0); }
+.mobile-nav-orientation-left.mobile-nav-hidden { transform: translate3d(-100%,0,0); }
+.mobile-nav-orientation-right.mobile-nav-visible,
+.mobile-nav-orientation-left.mobile-nav-visible,
+.mobile-nav-orientation-top.mobile-nav-visible {
+    transform: translate3d(0,0,0);
+}
+.burger-icon {
+    position: relative;
+    width: 1.75rem;
+    height: 1.25rem;
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+.burger-line {
+    width: 100%;
+    height: 0.2rem;
+    border-radius: 9999px;
+    background-color: currentColor;
+    transition: transform 0.35s ease, opacity 0.3s ease, width 0.3s ease;
+}
+.burger-icon.is-open .burger-line:nth-child(1) {
+    transform: translateY(0.525rem) rotate(45deg);
+}
+.burger-icon.is-open .burger-line:nth-child(2) {
+    opacity: 0;
+    width: 60%;
+}
+.burger-icon.is-open .burger-line:nth-child(3) {
+    transform: translateY(-0.525rem) rotate(-45deg);
+}
+.brand-badge {
+    position: relative;
+    color: inherit;
+}
+.brand-badge svg {
+    position: relative;
+    width: 1.65rem;
+    height: 1.65rem;
+    z-index: 2;
+    filter: drop-shadow(0 6px 12px rgba(0,0,0,0.35));
+}
+.brand-icon-secondary {
+    position: absolute;
+    width: 1.15rem;
+    height: 1.15rem;
+    bottom: 0.4rem;
+    right: 0.35rem;
+    opacity: 0.7;
+    z-index: 1;
+}
+.brand-initials {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    opacity: 0.18;
+    z-index: 0;
+}
 `;
+const iconLibrary: Record<string, string> = {
+  dice: `<rect x="3" y="3" width="18" height="18" rx="5" ry="5"></rect>
+        <circle cx="9" cy="9" r="1.6"></circle>
+        <circle cx="15" cy="9" r="1.6"></circle>
+        <circle cx="9" cy="15" r="1.6"></circle>
+        <circle cx="15" cy="15" r="1.6"></circle>`,
+  chip: `<circle cx="12" cy="12" r="9"></circle>
+        <circle cx="12" cy="12" r="5" fill="currentColor" opacity="0.35"></circle>
+        <path d="M12 3v3M12 18v3M21 12h-3M6 12H3M18.36 5.64l-2.12 2.12M7.76 16.24l-2.12 2.12M18.36 18.36l-2.12-2.12M7.76 7.76L5.64 5.64" stroke-width="1.5" stroke="currentColor" fill="none" stroke-linecap="round"></path>`,
+  crown: `<path d="M4 16l2-8 6 5 6-5 2 8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M4 16h16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+          <circle cx="6" cy="6" r="1"></circle>
+          <circle cx="12" cy="5" r="1"></circle>
+          <circle cx="18" cy="6" r="1"></circle>`,
+  gamepad: `<path d="M6 16l-1.5-1.5A4 4 0 018 8h8a4 4 0 013.5 6.5L18 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M9.5 13h-3M8 11.5v3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+            <circle cx="15.5" cy="12.5" r="1"></circle>
+            <circle cx="18" cy="11" r="1"></circle>`,
+  headset: `<path d="M4 13v-1a8 8 0 0116 0v1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+            <rect x="3" y="12" width="4" height="7" rx="1.5"></rect>
+            <rect x="17" y="12" width="4" height="7" rx="1.5"></rect>
+            <path d="M7 19a3 3 0 006 0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  puzzle: `<path d="M9 3h2a2 2 0 012 2v1a1 1 0 001 1h1a2 2 0 012 2v1h-1.5a1.5 1.5 0 100 3H16v1a2 2 0 01-2 2h-1a1 1 0 00-1 1v1a2 2 0 01-2 2H9v-2.5a1.5 1.5 0 10-3 0V21H4a2 2 0 01-2-2v-2.5a1.5 1.5 0 113 0V15a2 2 0 012-2h1a1 1 0 001-1V11a2 2 0 012-2V6a3 3 0 00-3-3V3z" fill="currentColor"></path>`,
+  trophy: `<path d="M8 4h8v2a4 4 0 01-4 4 4 4 0 01-4-4V4z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+           <path d="M8 4H5a2 2 0 002 3h1M16 4h3a2 2 0 01-2 3h-1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+           <path d="M12 11v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+           <path d="M9 21h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+           <path d="M10 19h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  medal: `<circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.5"></circle>
+          <path d="M8 12l-2 8 6-3 6 3-2-8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+          <path d="M10 2l2 4 2-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  flag: `<path d="M5 3v18" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+         <path d="M6 4h10l-2 4 2 4H6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>`,
+  spade: `<path d="M12 3c3 3 7 6 7 9a4 4 0 01-7 2 4 4 0 01-7-2c0-3 4-6 7-9z" fill="currentColor"></path>
+          <path d="M12 14v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M9.5 21h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  club: `<path d="M12 3a3 3 0 013 3 3 3 0 013 3 3 3 0 01-3 3h-1l1 4h-4l1-4h-1a3 3 0 01-3-3 3 3 0 013-3 3 3 0 013-3z" fill="currentColor"></path>
+          <path d="M11 16v5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M9 21h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  diamond: `<path d="M12 3l7 9-7 9-7-9 7-9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+            <path d="M5 12h14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  gem: `<path d="M7 4h10l3 5-8 11-8-11 3-5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+        <path d="M7 4l5 5 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+        <path d="M12 9v11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  spark: `<path d="M12 2l1.2 4.2L17 7l-3.2 2.3L14 13l-2-2-2 2 .2-3.7L7 7l3.8-.8L12 2z" fill="currentColor"></path>
+          <path d="M5 15l1 3M19 15l-1 3M12 17l.8 2.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  sun: `<circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 3v2M12 19v2M4.22 4.22l1.4 1.4M18.36 18.36l1.42 1.42M3 12h2M19 12h2M4.22 19.78l1.4-1.4M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"></path>`,
+  wave: `<path d="M3 15c2 0 2.5-2 4.5-2s2.5 2 4.5 2 2.5-2 4.5-2 2.5 2 4.5 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+         <path d="M3 11c2 0 2.5-2 4.5-2s2.5 2 4.5 2 2.5-2 4.5-2 2.5 2 4.5 2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.6"></path>`,
+  palm: `<path d="M12 21v-6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+          <path d="M12 15c.5-2 1.5-7-3-8 4.5-1 6 3 6 6 0-5 4-7 6-5-2 1-4 5-4 7 0-3-3-5-5-3z" fill="currentColor" fill-rule="evenodd"></path>`,
+  snow: `<path d="M12 3v18M5 7l14 10M19 7L5 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>
+         <path d="M9 5l3 3 3-3M9 19l3-3 3 3M5 10l3 2-3 2M19 10l-3 2 3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  mountain: `<path d="M3 19l7-12 2 4 3-5 6 13H3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+             <path d="M10 12l1 2 2-3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  tree: `<path d="M12 3l4 5h-2l3 4h-2l3 4h-6v4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+         <path d="M12 3L8 8h2l-3 4h2l-3 4h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>`,
+  meteor: `<path d="M4 4l12 4-4-4 8 8-8 8-4-4 4 12-12-4 4-4-8-8 8-8z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path>
+           <circle cx="9.5" cy="14.5" r="2.5" fill="currentColor" opacity="0.6"></circle>`,
+  rocket: `<path d="M12 2c3 1.5 5 5.5 5 9v3l2 2-2 2-2-2h-6l-2 2-2-2 2-2v-3c0-3.5 2-7.5 5-9z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+           <circle cx="12" cy="9" r="2" fill="currentColor"></circle>
+           <path d="M9 21l3-2 3 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  star: `<path d="M12 3l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.2-4.1 5.8-.8L12 3z" fill="currentColor"></path>`,
+  shield: `<path d="M12 3l8 3v5c0 6-4 10-8 11-4-1-8-5-8-11V6l8-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+           <path d="M12 7v10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`,
+  flare: `<circle cx="12" cy="12" r="2.5" fill="currentColor"></circle>
+          <path d="M12 4v2.5M12 17.5V20M4 12h2.5M17.5 12H20M6.5 6.5l1.8 1.8M15.7 15.7l1.8 1.8M17.5 6.5l-1.8 1.8M8.3 15.7l-1.8 1.8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"></path>`
+};
+
+function renderSvgIcon(id: string, classes: string): string {
+  const content = iconLibrary[id] || iconLibrary['star'];
+  return `<svg class="${classes}" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">${content}</svg>`;
+}

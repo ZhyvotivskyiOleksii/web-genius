@@ -9,6 +9,7 @@ function getAssetPaths() {
   const manifest = {
     images: [],
     games: [],
+    favicons: [],
   };
 
   // Получаем пути к картинкам
@@ -28,6 +29,15 @@ function getAssetPaths() {
       .filter(name => fs.statSync(path.join(gamesDir, name)).isDirectory());
   } catch (e) {
     console.warn('Could not read games directory for manifest.', e.message);
+  }
+
+  try {
+    const faviconDir = path.join(publicDir, 'images', 'favicon');
+    manifest.favicons = fs.readdirSync(faviconDir)
+      .filter(file => /\.(png)$/i.test(file))
+      .map(file => `images/favicon/${file}`);
+  } catch (e) {
+    console.warn('Could not read favicon directory for manifest.', e.message);
   }
 
   return manifest;

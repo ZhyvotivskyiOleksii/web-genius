@@ -1,5 +1,6 @@
 'use server';
 
+import path from 'path';
 import { generateSingleSite } from '@/lib/generation';
 import { editCode as editCodeFlow } from '@/ai/flows/edit-code';
 import { editCodeBulkFlow } from '@/components/edit-code-bulk';
@@ -255,25 +256,62 @@ export async function generateWebsiteAction(prevState: any, formData: FormData) 
     }
     
     // Convert Buffer content to base64 for client-side handling
-    for (const path in site.files) {
-        if (Buffer.isBuffer(site.files[path])) {
-            const buffer = site.files[path] as Buffer;
-            const extension = path.split('.').pop()?.toLowerCase() || 'png';
-            let mimeType = 'application/octet-stream';
-            if (['png', 'jpg', 'jpeg', 'gif'].includes(extension)) {
-                mimeType = `image/${extension}`;
-            }
-            site.files[path] = `data:${mimeType};base64,${buffer.toString('base64')}`;
-        }
+    const textExtensions = new Set([
+      'html',
+      'htm',
+      'css',
+      'js',
+      'ts',
+      'tsx',
+      'json',
+      'txt',
+      'svg',
+      'md',
+      'xml',
+    ]);
+    const imageMimeMap: Record<string, string> = {
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      avif: 'image/avif',
+    };
+
+    const serializedFiles: Record<string, string> = {};
+    for (const [filePath, value] of Object.entries(site.files)) {
+      if (typeof value === 'string') {
+        serializedFiles[filePath] = value;
+        continue;
+      }
+      if (!Buffer.isBuffer(value)) {
+        console.warn(`generateWebsiteAction: skipping unsupported file payload for ${filePath}`);
+        continue;
+      }
+
+      const ext = path.extname(filePath).replace('.', '').toLowerCase();
+      if (textExtensions.has(ext)) {
+        serializedFiles[filePath] = value.toString('utf-8');
+        continue;
+      }
+
+      const mimeType = imageMimeMap[ext] || 'application/octet-stream';
+      serializedFiles[filePath] = `data:${mimeType};base64,${value.toString('base64')}`;
     }
 
+    const safeSite = {
+      ...site,
+      files: serializedFiles,
+    };
 
-    return {
+    const result = {
       success: true,
-      site: site,
+      site: safeSite,
       error: null,
       fieldErrors: null,
-    };
+    } as const;
+
+    return structuredClone(result);
   } catch (error) {
     console.error('An unexpected error occurred during website generation:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';

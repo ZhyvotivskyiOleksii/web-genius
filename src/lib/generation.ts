@@ -142,6 +142,7 @@ export type Site = {
 type AssetManifest = {
   images?: string[];
   games?: string[];
+  favicons?: string[];
 };
 
 const assets = manifest as AssetManifest;
@@ -217,6 +218,23 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     // --- Step 1: Read Libraries (Images and Games) via manifest ---
     const imagePaths = Array.isArray(assets.images) ? assets.images : [];
     const manifestGames = Array.isArray(assets.games) ? assets.games : [];
+    const faviconPaths = Array.isArray(assets.favicons)
+      ? assets.favicons.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : [];
+    let selectedFaviconPath: string | undefined;
+    let selectedFaviconBuffer: Buffer | undefined;
+    if (faviconPaths.length > 0) {
+      const candidateIndex = Math.floor(Math.random() * faviconPaths.length);
+      const candidateFavicon = faviconPaths[candidateIndex];
+      const faviconDiskPath = path.join(publicDir, candidateFavicon);
+      try {
+        const buffer = await fs.promises.readFile(faviconDiskPath);
+        selectedFaviconPath = candidateFavicon.split(path.sep).join('/');
+        selectedFaviconBuffer = buffer;
+      } catch (error) {
+        console.warn(`Could not read favicon file at ${faviconDiskPath}`, error);
+      }
+    }
     const gameFolders = manifestGames.filter((folder) => {
       if (!folder) return false;
       try {
@@ -308,7 +326,16 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       if (gamePageContentResult.usage?.inputTokens) totalInputTokens += gamePageContentResult.usage.inputTokens;
       if (gamePageContentResult.usage?.outputTokens) totalOutputTokens += gamePageContentResult.usage.outputTokens;
 
-      files['game.html'] = getGamePageTemplate(title, gamePageContentResult.title, gameIframePath, gamePageContentResult.disclaimerHtml);
+      files['game.html'] = getGamePageTemplate(
+        title,
+        gamePageContentResult.title,
+        gameIframePath,
+        gamePageContentResult.disclaimerHtml,
+        undefined,
+        undefined,
+        websiteTypes,
+        selectedFaviconPath
+      );
 
       // Bundle the selected game's assets into the export so the iframe works offline.
       try {
@@ -324,8 +351,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
 
     // Add standard files
-    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes);
-    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, domain, policyContentHtml);
+    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, undefined, undefined, selectedFaviconPath);
+    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, domain, policyContentHtml, undefined, undefined, websiteTypes, selectedFaviconPath);
     files['scripts/main.js'] = mainJsTemplate;
     files['styles/style.css'] = stylesCssTemplate;
     
@@ -338,6 +365,10 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       } catch (error) {
         console.warn(`Could not read image file at ${localPath}`, error);
       }
+    }
+
+    if (selectedFaviconPath && selectedFaviconBuffer) {
+      files[selectedFaviconPath] = selectedFaviconBuffer;
     }
 
     const elapsedMs = Date.now() - startedAt;

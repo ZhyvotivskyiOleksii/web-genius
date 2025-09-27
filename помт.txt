@@ -1,17 +1,14 @@
 Сгенерируй для меня сайт по тематике социальное казино. Суть сайта - бесплатные слот игры. На сайте нельзя выиграть реальные деньги и нельзя ничего купить. Сайт имеет только ознакомительную (демо) версию слот игры, чтобы пользователи без риска могли ознакомиться с слот играми.
-Сайт должен иметь полноценную структуру. Например блоки: Hero, about, cards, contacts, faq, features, paralaks, stats, footer, header. Я хочу, чтобы в сайте было минимум 8 блоков. Сайт должен быть наполнен контентом и не выглядеть сыро и пусто. Можешь также использовать какие-то символы из базы гугла, чтобы сайт выглядел более наполненным.
+Сайт должен иметь полноценную структуру. Например блоки: Hero, about, cards,  faq, features,  stats, footer, header. Я хочу, чтобы в сайте было минимум 8 блоков. Сайт должен быть наполнен контентом и не выглядеть сыро и пусто. Можешь также использовать какие-то символы из базы гугла, чтобы сайт выглядел более наполненным.
 Очень важно, чтобы в сайте было упоминание несколько раз о том, что сайт только для совершеннолетних и на сайте нельзя ничего купить.
 Сайт должен быть на английском языке.
 Визуально сайт должен быть современный, красивый, красочный, как сайт бесплатного онлайн казино.
 Так же оптимизируй сайт по СЕО. Чтобы все было четко. Чтобы были какие-то заголовки в тематике социального казино. Описания и прочее.
-В сайте используй 10 картинок. Они будут загружены в отдельную папку image в папке с сайтом. Все картинки имеют название по очереди от 1 до 10. Формат картинок webp
-Добавь фавикон в сайт.
 Также на сайте будет одна демо игра. Игра находится в папке game в корневой папке сайта. Так что на нашем сайте должна быть кнопка, которая предложит игроку поиграть.
 Добавь также меню на сайте, но пусть оно будет не на отдельные страницы, а просто якорями в рамках нашего сайта, но на разные разделы лендинга.
 Обязательно нужно будет добавить в сайт эти разделы:
 Terms & Conditions
 Privacy Policy
-Responsible Gaming
 Ну и в футере нужно уместить еще раз текст, который напомнит, что сайт только для совершеннолетних игроков + что сайт не дает возможности заработать денег. Вот пример такого текста:
 This is a social gaming platform intended for an adult audience (18+) for amusement purposes only. The games do not offer "real money gambling" or an opportunity to win real money or prizes. Practice or success at social casino gaming does not imply future success at "real money gambling."
 Добавь всплывающее окно кукисов. 
@@ -56,3 +53,11 @@ Styl: nowoczesny, prosty, czytelny.
 
 
 
+
+
+
+
+
+
+
+Design a sophisticated and futuristic social casino website with a 'cyber-luxe' visual style, using a dark, near-black theme illuminated by bold, electric gradients of magenta and cyan. The hero section must be immersive, featuring a full-screen background with a subtle, ambient particle effect powered by a `<canvas id="fx-canvas">`. Over this, display the headline "The Apex of Social Gaming" in a sharp, modern sans-serif font, with a call-to-action button that has a subtle pulse micro-interaction. Below the hero, create a games section using a grid of cards with a glassmorphism effect; on hover, each card should scale up slightly as a Material Icons `play_arrow` icon fades in. Follow with a value proposition section using scroll-reveal animations for each column, which feature icons like Font Awesome's `fa-solid fa-trophy` for 'Daily Jackpots' and `fa-solid fa-users` for 'Vibrant Community'. Implement a sleek testimonial slider with a subtle parallax scroll effect on the background. A critical requirement is a full-width, clearly separated disclaimer section just before the footer, prominently featuring a Material Icons `eighteen_up_rating` icon; this icon must also be present on every individual game page. The site must include a minimalist header with a `fa-solid fa-bars` burger icon for the mobile menu, a comprehensive footer, a dedicated privacy policy page, and a non-intrusive cookie consent modal, ensuring a complete and visually stunning user experience across at least eight distinct sections.

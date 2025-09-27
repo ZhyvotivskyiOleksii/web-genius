@@ -57,6 +57,7 @@ const prompt = ai.definePrompt({
   - **Apply Changes:** Modify the code to fulfill the request and touch only the lines that are absolutely necessary. Preserve existing structure, formatting, comments, and unrelated content exactly as they are. For example, if asked to change a color or logo, only update the pertinent attributes or markup.
   - **Return Full Content:** You MUST return the complete file content, not just a snippet.
   - **Do Not Add Comments:** Do not add any comments to the code itself.
+  - **Keep Logos Clickable:** If the file contains a logo wrapped in a link, preserve that anchor tag so the logo remains clickable and points to the same destination.
   - **Provide Reasoning:** Briefly explain the changes you made in the 'reasoning' field. For example: "I updated the button's background color to blue by changing the Tailwind CSS class from 'bg-red-500' to 'bg-blue-500'."
   - **Language:** Detect the user's prompt language and write the 'reasoning' in that language. If the user writes in Ukrainian, reply in Ukrainian; if in Polish, reply in Polish; if in Russian, reply in Russian. Otherwise reply in the prompt language.
 
