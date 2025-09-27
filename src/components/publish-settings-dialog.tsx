@@ -17,10 +17,16 @@ export function PublishSettingsDialog({ open, onOpenChange, onSaved, suggestDoma
   const [token, setToken] = useState("");
   const [domain, setDomain] = useState("");
   const [docroot, setDocroot] = useState("");
+  const [docrootManual, setDocrootManual] = useState(false);
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testMessage, setTestMessage] = useState<string | null>(null);
   const [testOk, setTestOk] = useState<boolean | null>(null);
+
+  const deriveDocroot = (value: string) => {
+    const clean = (value || '').trim().replace(/^https?:\/\//i, '').replace(/^www\./i, '').replace(/\/.*$/, '');
+    return clean ? `/website/${clean}` : '';
+  };
 
   useEffect(() => {
     (async () => {
@@ -39,15 +45,35 @@ export function PublishSettingsDialog({ open, onOpenChange, onSaved, suggestDoma
           setHost(res.settings.host || "");
           setUsername(res.settings.username || "");
           setToken(res.settings.token || "");
-          // Prioritize suggested domain for the current site context
-          // Prioritize the suggested domain for the current site context
-          setDomain(suggestDomain || res.settings.domain || "");
-          setDocroot(suggestDocroot || res.settings.docroot || "");
+          const loadedDomain = res.settings.domain || "";
+          const loadedDocroot = res.settings.docroot || "";
+          const domainValue = suggestDomain || loadedDomain;
+          setDomain(domainValue);
+          if (suggestDocroot) {
+            setDocroot(suggestDocroot);
+            setDocrootManual(true);
+          } else if (loadedDocroot) {
+            setDocroot(loadedDocroot);
+            setDocrootManual(true);
+          } else {
+            const autoDocroot = deriveDocroot(domainValue);
+            setDocroot(autoDocroot);
+            setDocrootManual(false);
+          }
         } else {
-          // No saved settings — prefill from suggestions if provided
           // No saved settings — pre-fill from suggestions if provided
+          const domainValue = suggestDomain || "";
           if (suggestDomain) setDomain(suggestDomain);
-          if (suggestDocroot || suggestDomain) setDocroot(suggestDocroot || `/website/${(suggestDomain || '').replace(/^www\./,'')}`);
+          if (suggestDocroot) {
+            setDocroot(suggestDocroot);
+            setDocrootManual(true);
+          } else if (suggestDomain) {
+            setDocroot(deriveDocroot(suggestDomain));
+            setDocrootManual(false);
+          } else {
+            setDocroot("");
+            setDocrootManual(false);
+          }
         }
       } catch (err) {
         console.error('Failed to load publish settings:', err);
@@ -81,11 +107,28 @@ export function PublishSettingsDialog({ open, onOpenChange, onSaved, suggestDoma
           </div>
           <div className="grid gap-2">
             <label className="text-sm">Domain</label>
-            <Input value={domain} onChange={(e) => { setDomain(e.target.value); setDocroot(`/website/${e.target.value.replace(/^www\./,'')}`); }} placeholder="mysite.com" />
+            <Input
+              value={domain}
+              onChange={(e) => {
+                const value = e.target.value;
+                setDomain(value);
+                if (!docrootManual) {
+                  setDocroot(deriveDocroot(value));
+                }
+              }}
+              placeholder="mysite.com"
+            />
           </div>
           <div className="grid gap-2">
             <label className="text-sm">Document Root</label>
-            <Input value={docroot} onChange={(e) => setDocroot(e.target.value)} placeholder="/website/mysite.com" />
+            <Input
+              value={docroot}
+              onChange={(e) => {
+                setDocroot(e.target.value);
+                setDocrootManual(true);
+              }}
+              placeholder="/website/mysite.com"
+            />
           </div>
 
           <div className="flex items-center justify-between">
