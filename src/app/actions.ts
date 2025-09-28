@@ -1,5 +1,6 @@
 'use server';
 
+import { promises as fs } from 'fs';
 import path from 'path';
 import { generateSingleSite } from '@/lib/generation';
 import { editCode as editCodeFlow } from '@/ai/flows/edit-code';
@@ -19,6 +20,201 @@ type UsageLike = {
   outputTokens?: number | null;
   totalTokens?: number | null;
 };
+
+type ElementAsset = {
+  path: string;
+  content: string;
+};
+
+type ElementEditResult = Awaited<ReturnType<typeof editElementFlow>> & {
+  assets?: ElementAsset[];
+};
+
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg']);
+
+const MIME_TYPE_MAP: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  webp: 'image/webp',
+  gif: 'image/gif',
+  svg: 'image/svg+xml',
+};
+
+const CHANGE_VERBS = [
+  'change',
+  'update',
+  'replace',
+  'swap',
+  'refresh',
+  'смен',
+  'замен',
+  'помен',
+  'обнов',
+  'змiн',
+  'змін',
+  'замі',
+  'заміни',
+];
+
+function detectPromptLanguage(prompt: string): 'ru' | 'uk' | 'pl' | 'en' {
+  const lower = prompt.toLowerCase();
+  if (/[а-яё]+/.test(lower)) {
+    if (/[іїєґ]/.test(lower)) return 'uk';
+    return 'ru';
+  }
+  if (/[ąćęłńóśźż]/.test(lower)) return 'pl';
+  return 'en';
+}
+
+function buildReasoning(language: ReturnType<typeof detectPromptLanguage>, kind: 'logo' | 'image', pool: 'casino' | 'sport-bar'): string {
+  const poolLabel = pool === 'sport-bar' ? 'sport bar' : 'casino';
+  if (language === 'ru') {
+    return kind === 'logo'
+      ? `Заменил логотип на новое изображение из каталога ${poolLabel}.`
+      : `Обновил изображение, установив файл из каталога ${poolLabel}.`;
+  }
+  if (language === 'uk') {
+    return kind === 'logo'
+      ? `Змінив логотип на новий файл із бібліотеки ${poolLabel}.`
+      : `Оновив зображення, використавши файл із бібліотеки ${poolLabel}.`;
+  }
+  if (language === 'pl') {
+    return kind === 'logo'
+      ? `Podmieniłem logo na nową grafikę z katalogu ${poolLabel}.`
+      : `Zaktualizowałem obraz, wybierając plik z katalogu ${poolLabel}.`;
+  }
+  return kind === 'logo'
+    ? `Replaced the logo with a new asset from the ${poolLabel} library.`
+    : `Updated the image using a file from the ${poolLabel} library.`;
+}
+
+async function pickRandomAsset(folder: string): Promise<ElementAsset | null> {
+  const assetDir = path.join(process.cwd(), 'public', 'images', folder);
+  let entries: string[] = [];
+  try {
+    entries = await fs.readdir(assetDir);
+  } catch {
+    return null;
+  }
+  const files = entries.filter((file) => IMAGE_EXTENSIONS.has(path.extname(file).toLowerCase()));
+  if (!files.length) return null;
+  const randomFile = files[Math.floor(Math.random() * files.length)];
+  const absolutePath = path.join(assetDir, randomFile);
+  let buffer: Buffer;
+  try {
+    buffer = await fs.readFile(absolutePath);
+  } catch {
+    return null;
+  }
+  const ext = path.extname(randomFile).toLowerCase().replace('.', '');
+  const mime = MIME_TYPE_MAP[ext] || 'application/octet-stream';
+  const webPath = ['images', folder, randomFile].join('/');
+  return {
+    path: webPath,
+    content: `data:${mime};base64,${buffer.toString('base64')}`,
+  };
+}
+
+function containsVerb(promptLower: string): boolean {
+  return CHANGE_VERBS.some((verb) => promptLower.includes(verb));
+}
+
+function hasBrandIcon(html: string): boolean {
+  return /brand-icon-main/i.test(html) || /id="logo-icon"/i.test(html);
+}
+
+function swapBrandIcon(html: string, src: string): string | null {
+  const mainRegex = /<img[^>]*class=["'][^"']*brand-icon-main[^"']*["'][^>]*>/i;
+  if (!mainRegex.test(html)) return null;
+  let updated = html.replace(mainRegex, (match) => {
+    let next = match;
+    if (/src\s*=/.test(next)) {
+      next = next.replace(/src\s*=\s*(["'])[\s\S]*?\1/i, `src="${src}"`);
+    } else {
+      next = next.replace('<img', `<img src="${src}"`);
+    }
+    next = next.replace(/data-icon-key\s*=\s*(["'])[\s\S]*?\1/i, '');
+    return next;
+  });
+  updated = updated.replace(/<img[^>]*class=["'][^"']*brand-icon-secondary[^"']*["'][^>]*>\s*/gi, '');
+  return updated;
+}
+
+function swapFirstImage(html: string, src: string): string | null {
+  const imgRegex = /<img[^>]*>/i;
+  if (!imgRegex.test(html)) return null;
+  return html.replace(imgRegex, (match) => {
+    let next = match;
+    if (/src\s*=/.test(next)) {
+      next = next.replace(/src\s*=\s*(["'])[\s\S]*?\1/i, `src="${src}"`);
+    } else {
+      next = next.replace('<img', `<img src="${src}"`);
+    }
+    next = next.replace(/srcset\s*=\s*(["'])[\s\S]*?\1/i, '');
+    next = next.replace(/data-icon-key\s*=\s*(["'])[\s\S]*?\1/i, '');
+    return next;
+  });
+}
+
+function detectSitePool(siteTypes: string[]): 'sport-bar' | 'casino' {
+  if (siteTypes.some((type) => type.toLowerCase().includes('sport'))) {
+    return 'sport-bar';
+  }
+  return 'casino';
+}
+
+async function maybeHandleCustomElementEdit({
+  prompt,
+  elementHtml,
+  siteTypes,
+}: {
+  prompt: string;
+  elementHtml: string;
+  siteTypes: string[];
+}): Promise<ElementEditResult | null> {
+  const promptLower = prompt.toLowerCase();
+  if (!containsVerb(promptLower)) {
+    return null;
+  }
+
+  const language = detectPromptLanguage(prompt);
+  const pool = detectSitePool(siteTypes);
+
+  if ((/logo/.test(promptLower) || /логотип/.test(promptLower) || /лого/.test(promptLower)) && hasBrandIcon(elementHtml)) {
+    const folder = pool === 'sport-bar' ? 'logo-bar' : 'logo-casino';
+    const asset = await pickRandomAsset(folder);
+    if (!asset) return null;
+    const nextHtml = swapBrandIcon(elementHtml, asset.path);
+    if (!nextHtml) return null;
+    return {
+      elementHtml: nextHtml,
+      reasoning: buildReasoning(language, 'logo', pool),
+      css: undefined,
+      usage: undefined,
+      model: 'manual-asset-swap',
+      assets: [asset],
+    } as ElementEditResult;
+  }
+
+  if ((/image/.test(promptLower) || /photo/.test(promptLower) || /фото/.test(promptLower) || /картин/.test(promptLower) || /obraz/.test(promptLower)) && /<img/i.test(elementHtml)) {
+    const folder = pool === 'sport-bar' ? 'img-bar' : 'img-casino';
+    const asset = await pickRandomAsset(folder);
+    if (!asset) return null;
+    const nextHtml = swapFirstImage(elementHtml, asset.path);
+    if (!nextHtml) return null;
+    return {
+      elementHtml: nextHtml,
+      reasoning: buildReasoning(language, 'image', pool),
+      css: undefined,
+      usage: undefined,
+      model: 'manual-asset-swap',
+      assets: [asset],
+    } as ElementEditResult;
+  }
+
+  return null;
+}
 
 function computeDiffStats(oldText: string, newText: string): { added: number; removed: number } {
   const a = (oldText || '').split(/\r?\n/);
@@ -442,6 +638,7 @@ const editElementSchema = z.object({
   elementId: z.string().optional().nullable(),
   tagName: z.string().optional().nullable(),
   path: z.string().optional().nullable(),
+  siteTypes: z.string().optional().nullable(),
 });
 
 export async function editCodeAction(prevState: any, formData: FormData) {
@@ -530,6 +727,7 @@ export async function editElementAction(prevState: any, formData: FormData) {
     elementId: formData.get('elementId'),
     tagName: formData.get('tagName'),
     path: formData.get('path'),
+    siteTypes: formData.get('siteTypes'),
   });
 
   if (!validatedFields.success) {
@@ -552,15 +750,36 @@ export async function editElementAction(prevState: any, formData: FormData) {
     elementId,
     tagName,
     path,
+    siteTypes,
   } = validatedFields.data;
+
+  let parsedSiteTypes: string[] = [];
+  if (typeof siteTypes === 'string' && siteTypes.trim().length) {
+    try {
+      const parsed = JSON.parse(siteTypes);
+      if (Array.isArray(parsed)) {
+        parsedSiteTypes = parsed.map((value) => String(value));
+      }
+    } catch {
+      parsedSiteTypes = siteTypes.split(',').map((value) => value.trim()).filter(Boolean);
+    }
+  }
 
   try {
     const sb = await getSbService();
-    const result = await editElementFlow({
-      elementHtml,
+    let result: ElementEditResult | null = await maybeHandleCustomElementEdit({
       prompt,
-      css: cssContent || undefined,
+      elementHtml,
+      siteTypes: parsedSiteTypes,
     });
+
+    if (!result) {
+      result = await editElementFlow({
+        elementHtml,
+        prompt,
+        css: cssContent || undefined,
+      });
+    }
 
     if (!result.elementHtml) {
       throw new Error('Model did not return updated markup.');
@@ -586,6 +805,17 @@ export async function editElementAction(prevState: any, formData: FormData) {
     const updates: { site_id: string; path: string; content: string; updated_by: string }[] = [
       { site_id: siteId, path: fileName, content: updatedFileCode, updated_by: userId },
     ];
+
+    if (Array.isArray(result.assets)) {
+      for (const asset of result.assets) {
+        updates.push({
+          site_id: siteId,
+          path: asset.path,
+          content: asset.content,
+          updated_by: userId,
+        });
+      }
+    }
 
     let cssDiff: { added: number; removed: number } | null = null;
 
@@ -657,6 +887,7 @@ export async function editElementAction(prevState: any, formData: FormData) {
         reasoning: aiResponseText,
         usage: result.usage,
         model: result.model,
+        assets: result.assets && result.assets.length ? result.assets : undefined,
       },
       chat: chatEntry,
     };

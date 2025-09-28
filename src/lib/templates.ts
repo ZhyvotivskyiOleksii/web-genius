@@ -334,7 +334,12 @@ function buildNavItems(
   return items;
 }
 
-function renderLogo(title: string, theme: BrandingTheme, brandVisual: BrandVisual): string {
+function renderLogo(
+  title: string,
+  theme: BrandingTheme,
+  brandVisual: BrandVisual,
+  logoAssetPath?: string,
+): string {
   const displayTitle = formatBrandTitle(title);
   const titleAttr = escapeHtmlAttribute(title || displayTitle);
   const displayText = escapeHtmlText(displayTitle);
@@ -345,12 +350,18 @@ function renderLogo(title: string, theme: BrandingTheme, brandVisual: BrandVisua
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  const primaryIconImg = renderBrandIconImg(brandVisual.primaryIcon, 'brand-icon-main');
-  const secondaryIconImg = brandVisual.secondaryIcon ? renderBrandIconImg(brandVisual.secondaryIcon, 'brand-icon-secondary') : '';
+  const primaryIconImg = logoAssetPath
+    ? `<img id="logo-icon" src="${logoAssetPath}" alt="${displayText} logo" class="brand-icon-main absolute inset-0 h-full w-full object-contain" loading="lazy" />`
+    : renderBrandIconImg(brandVisual.primaryIcon, 'brand-icon-main');
+  const secondaryIconImg = logoAssetPath
+    ? ''
+    : brandVisual.secondaryIcon
+      ? renderBrandIconImg(brandVisual.secondaryIcon, 'brand-icon-secondary')
+      : '';
   return `
     <a href="index.html" class="flex items-center gap-3 text-xl font-bold">
       <span class="brand-badge flex h-11 w-11 items-center justify-center rounded-2xl relative overflow-hidden ${theme.brandBadgeClass}">
-        <span class="brand-initials" aria-hidden="true">${initials}</span>
+        ${logoAssetPath ? '' : `<span class="brand-initials" aria-hidden="true">${initials}</span>`}
         ${primaryIconImg}
         ${secondaryIconImg}
       </span>
@@ -392,14 +403,15 @@ function renderHeader(
   websiteTypes: string[],
   brandVisual: BrandVisual,
   currentPage: PageContext,
-  sectionAnchors: SectionNavItem[] = []
+  sectionAnchors: SectionNavItem[] = [],
+  logoAssetPath?: string,
 ): string {
   const items = buildNavItems(currentPage, websiteTypes, sectionAnchors);
   return `
     <header id="header" class="${theme.headerClass} fixed top-0 left-0 right-0 z-40 transition-shadow duration-300">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex items-center justify-between h-16">
-          ${renderLogo(title, theme, brandVisual)}
+          ${renderLogo(title, theme, brandVisual, logoAssetPath)}
           <nav class="hidden md:block">
             <div class="ml-10 flex items-baseline space-x-4">
               ${renderDesktopNav(theme, items)}
@@ -593,7 +605,8 @@ export const getIndexHtmlTemplate = (
   brandVisual?: BrandVisual,
   faviconPath?: string,
   includeHeader: boolean = true,
-  includeFooter: boolean = true
+  includeFooter: boolean = true,
+  logoAssetPath?: string,
 ) => {
   const appliedTheme = resolveTheme(theme);
   const brandGlyph = resolveBrandVisual(brandVisual);
@@ -619,7 +632,7 @@ export const getIndexHtmlTemplate = (
     </style>
 </head>
 <body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="index">
-    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index', sectionAnchors) : ''}
+    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index', sectionAnchors, logoAssetPath) : ''}
 
     <main class="${includeHeader ? 'pt-16' : ''}">
         ${allSectionsHtml}
@@ -711,7 +724,8 @@ export const getGamePageTemplate = (
   websiteTypes: string[] = [],
   faviconPath?: string,
   includeHeader: boolean = true,
-  includeFooter: boolean = true
+  includeFooter: boolean = true,
+  logoAssetPath?: string,
 ) => {
   const appliedTheme = resolveTheme(theme);
   const brandGlyph = resolveBrandVisual(brandVisual);
@@ -747,7 +761,7 @@ export const getGamePageTemplate = (
     </style>
 </head>
 <body class="${appliedTheme.bodyClass}" data-has-game="true" data-page="game">
-    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game', sectionAnchors) : ''}
+    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game', sectionAnchors, logoAssetPath) : ''}
 
     <main class="flex-grow flex flex-col items-center justify-center p-4">
         <div class="flex flex-col items-center gap-2 mb-2">
@@ -795,7 +809,8 @@ export const getPrivacyPolicyTemplate = (
   websiteTypes: string[] = [],
   faviconPath?: string,
   includeHeader: boolean = true,
-  includeFooter: boolean = true
+  includeFooter: boolean = true,
+  logoAssetPath?: string,
 ) => {
   const contactEmail = `contact@${domain}`;
   const policyVariant = randomChoice(policyVariants);
@@ -838,7 +853,7 @@ export const getPrivacyPolicyTemplate = (
     </style>
 </head>
 <body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="policy">
-    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy', sectionAnchors)}
+    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy', sectionAnchors, logoAssetPath)}
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <section class="rounded-3xl border border-white/10 bg-white/5 backdrop-blur mb-12 p-8 ${appliedTheme.mode === 'light' ? 'bg-white shadow-[0_24px_45px_rgba(90,110,255,0.18)] text-slate-700' : 'text-slate-100'}">

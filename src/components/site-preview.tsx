@@ -344,6 +344,7 @@ const initialElementEditState: {
     reasoning: string;
     usage?: { inputTokens?: number; outputTokens?: number };
     model?: string;
+    assets?: { path: string; content: string }[];
   } | null;
   chat: {
     created_at?: string;
@@ -987,6 +988,14 @@ export function SitePreview({
     initialElementEditState as any
   );
 
+  const serializedSiteTypes = useMemo(() => {
+    try {
+      return JSON.stringify(Array.isArray((site as any)?.types) ? (site as any).types : []);
+    } catch {
+      return '[]';
+    }
+  }, [site]);
+
   const ensureProjectId = useCallback(async (): Promise<boolean> => {
     if (siteId && userId) return true;
     if (!userId) return false;
@@ -1235,10 +1244,17 @@ export function SitePreview({
       elementEditState.response &&
       elementEditState !== lastHandledElementResponseRef.current
     ) {
-      const { fileName, code, css, reasoning, usage, model, elementHtml } = elementEditState.response as any;
+      const { fileName, code, css, reasoning, usage, model, elementHtml, assets } = elementEditState.response as any;
       const updates: Record<string, string> = { [fileName]: code };
       if (typeof css === 'string' && css.length > 0) {
         updates['styles/style.css'] = css;
+      }
+      if (Array.isArray(assets) && assets.length > 0) {
+        for (const asset of assets) {
+          if (asset && typeof asset.path === 'string' && typeof asset.content === 'string') {
+            updates[asset.path] = asset.content;
+          }
+        }
       }
       setSite((prev) => ({
         ...prev,
@@ -1666,7 +1682,7 @@ export function SitePreview({
                           onClick={e => e.stopPropagation()}
                         />
                       ) : (
-                        <span className="text-[#cccccc] text-[13px]">{child.name}</span>
+                        <span className="text-[#cccccc] text-[13px]" title={child.name}>{ellipsisMiddle(child.name, 20)}</span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
@@ -1714,7 +1730,7 @@ export function SitePreview({
                 ev.dataTransfer.effectAllowed = 'move';
               }}
             >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" title={child.name}>
                     {fileIcon(child.name)}
                     {renamingPath === child.path ? (
                       <Input
@@ -1759,12 +1775,19 @@ export function SitePreview({
   );
 
   // --- DND / PASTE UPLOADS ---
+  const ellipsisMiddle = (value: string, max: number) => {
+    if (value.length <= max) return value;
+    if (max <= 3) return value.slice(0, max);
+    const front = Math.ceil((max - 1) / 2);
+    const back = Math.floor((max - 1) / 2);
+    return `${value.slice(0, front)}…${value.slice(value.length - back)}`;
+  };
+
   const shortFileName = (name: string) => {
     const dot = name.lastIndexOf('.');
     const base = dot > 0 ? name.slice(0, dot) : name;
     const ext = dot > 0 ? name.slice(dot + 1) : '';
-    const max = 10;
-    const baseShort = base.length > max ? base.slice(0, max) + '…' : base;
+    const baseShort = ellipsisMiddle(base, 12);
     return ext ? `${baseShort}.${ext}` : baseShort;
   };
 
@@ -1772,8 +1795,7 @@ export function SitePreview({
     const dot = name.lastIndexOf('.');
     const base = dot > 0 ? name.slice(0, dot) : name;
     const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
-    const max = 14;
-    const baseShort = base.length > max ? base.slice(0, max) + '…' : base;
+    const baseShort = ellipsisMiddle(base, 18);
     return { baseShort, ext };
   };
 
@@ -2812,6 +2834,7 @@ export function SitePreview({
               <input type="hidden" name="cssContent" value={elementCssContext} />
               <input type="hidden" name="userId" value={userId || ''} />
               <input type="hidden" name="siteId" value={siteId || ''} />
+              <input type="hidden" name="siteTypes" value={serializedSiteTypes} />
               <div className="flex items-center justify-end gap-2">
                 <Button
                   type="button"

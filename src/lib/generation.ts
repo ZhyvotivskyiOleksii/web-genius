@@ -85,6 +85,33 @@ function detectLanguage(prompt: string): { name: string; iso: string } {
 
 type SectionSpec = { type: string; titles: ((site: string) => string)[]; details?: ((site: string) => string)[] };
 
+const IMAGE_FILE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.avif']);
+
+async function listImageFiles(relativeDir: string): Promise<string[]> {
+  const baseDir = path.join(process.cwd(), 'public', relativeDir);
+  try {
+    const entries = await fs.promises.readdir(baseDir, { withFileTypes: true });
+    return entries
+      .filter((entry) => entry.isFile() && IMAGE_FILE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
+      .map((entry) => `${relativeDir}/${entry.name}`);
+  } catch {
+    return [];
+  }
+}
+
+async function pickImageAsset(relativeDir: string): Promise<{ webPath: string; buffer: Buffer } | null> {
+  const files = await listImageFiles(relativeDir);
+  if (!files.length) return null;
+  const webPath = files[Math.floor(Math.random() * files.length)];
+  const absolute = path.join(process.cwd(), 'public', webPath);
+  try {
+    const buffer = await fs.promises.readFile(absolute);
+    return { webPath, buffer };
+  } catch {
+    return null;
+  }
+}
+
 const englishSectionLibrary: SectionSpec[] = [
   {
     type: 'hero',
@@ -582,6 +609,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
   try {
     const startedAt = Date.now();
     const isGameSite = websiteTypes.includes('Game');
+    const isSportSite = websiteTypes.some((type) => type.toLowerCase().includes('sport'));
     const publicDir = path.join(process.cwd(), 'public');
     const sourceGamesDir = path.join(publicDir, 'games');
     const { name: languageName } = resolveLanguage(prompt, websiteTypes);
@@ -590,9 +618,26 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const brandTheme = chooseBrandingTheme({ websiteTypes, preferredMode });
     const brandVisual = inferBrandVisual(websiteTypes, prompt);
     const styleHints = createStyleHintPool(brandTheme.mode, isGameSite);
+    const selectedLogoAsset = await pickImageAsset(isSportSite ? 'images/logo-bar' : 'images/logo-casino');
 
     // --- Step 1: Read Libraries (Images and Games) via manifest ---
-    const imagePaths = Array.isArray(assets.images) ? assets.images : [];
+    let imagePaths = Array.isArray(assets.images) ? assets.images : [];
+    if (isSportSite) {
+      const barImages = await listImageFiles('images/img-bar');
+      if (barImages.length) {
+        imagePaths = barImages;
+      }
+    } else {
+      const casinoImages = imagePaths.filter((value) => value.includes('img-casino'));
+      if (casinoImages.length) {
+        imagePaths = casinoImages;
+      } else {
+        const fallbackCasino = await listImageFiles('images/img-casino');
+        if (fallbackCasino.length) {
+          imagePaths = fallbackCasino;
+        }
+      }
+    }
     const manifestGames = Array.isArray(assets.games) ? assets.games : [];
     const faviconPaths = Array.isArray(assets.favicons)
       ? assets.favicons.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
@@ -815,7 +860,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         websiteTypes,
         selectedFaviconPath,
         layoutPrefs.includeHeader,
-        layoutPrefs.includeFooter
+        layoutPrefs.includeFooter,
+        selectedLogoAsset?.webPath
       );
 
       // Bundle the selected game's assets into the export so the iframe works offline.
@@ -832,8 +878,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
 
     // Add standard files
-    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, sortedNavAnchors, brandTheme, brandVisual, selectedFaviconPath, layoutPrefs.includeHeader, layoutPrefs.includeFooter);
-    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, normalizedDomain, policyContentHtml, sortedNavAnchors, brandTheme, brandVisual, websiteTypes, selectedFaviconPath, layoutPrefs.includeHeader, layoutPrefs.includeFooter);
+    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, sortedNavAnchors, brandTheme, brandVisual, selectedFaviconPath, layoutPrefs.includeHeader, layoutPrefs.includeFooter, selectedLogoAsset?.webPath);
+    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, normalizedDomain, policyContentHtml, sortedNavAnchors, brandTheme, brandVisual, websiteTypes, selectedFaviconPath, layoutPrefs.includeHeader, layoutPrefs.includeFooter, selectedLogoAsset?.webPath);
     files['scripts/main.js'] = mainJsTemplate;
     files['styles/style.css'] = stylesCssTemplate;
     
@@ -846,6 +892,10 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       } catch (error) {
         console.warn(`Could not read image file at ${localPath}`, error);
       }
+    }
+
+    if (selectedLogoAsset) {
+      files[selectedLogoAsset.webPath] = selectedLogoAsset.buffer;
     }
 
     if (selectedFaviconPath && selectedFaviconBuffer) {
