@@ -312,9 +312,14 @@ export default function Home() {
 
           const rows = Object.entries(state.site.files).map(([path, content]) => ({ site_id: id!, path, content: String(content || ''), updated_by: userId }));
           if (rows.length) {
-            const { error: filesErr } = await sb.from('site_files').upsert(rows, { onConflict: 'site_id,path' });
-            if (filesErr) {
-              console.error('site_files upsert failed:', filesErr);
+            const chunkSize = 40;
+            for (let i = 0; i < rows.length; i += chunkSize) {
+              const slice = rows.slice(i, i + chunkSize);
+              const { error: filesErr } = await sb.from('site_files').upsert(slice, { onConflict: 'site_id,path' });
+              if (filesErr) {
+                console.error('site_files upsert failed:', filesErr);
+                throw filesErr;
+              }
             }
           }
           redirectedRef.current = true;

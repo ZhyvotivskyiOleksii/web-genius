@@ -46,6 +46,7 @@ import {
   EyeOff,
   Wrench,
   Trash2,
+  Archive,
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -191,7 +192,7 @@ type DeployedRecord = {
   status?: string | null;
 };
 
-type ProjectStatusKey = 'all' | 'work' | 'deploy' | 'cloaking';
+type ProjectStatusKey = 'all' | 'work' | 'deploy' | 'cloaking' | 'archived';
 
 const deriveProjectDomain = (project: ProjectRecord): string =>
   deriveDomainName(
@@ -209,28 +210,41 @@ const PROJECT_STATUS_PRESETS: { key: ProjectStatusKey; label: string; matches: s
   { key: 'work', label: 'In Progress', matches: ['draft', 'work', 'in_progress', 'pending', 'edit'] },
   { key: 'deploy', label: 'Deploy', matches: ['deploy', 'published', 'live', 'production'] },
   { key: 'cloaking', label: 'Cloaking', matches: ['cloak', 'cloaking', 'stealth'] },
+  { key: 'archived', label: 'Archived', matches: ['archive', 'archived'] },
 ];
 
-const PROJECT_STATUS_STYLES: Record<ProjectStatusKey, { label: string; badgeClass: string; icon: JSX.Element }> = {
+const PROJECT_GROUP_ORDER: ProjectStatusKey[] = ['work', 'deploy', 'cloaking', 'archived', 'all'];
+
+const PROJECT_STATUS_STYLES: Record<ProjectStatusKey, { label: string; badgeClass: string; icon: JSX.Element; accentColor: string }> = {
   all: {
     label: 'All',
-    badgeClass: 'border-white/10 bg-white/5 text-slate-100',
+    badgeClass: 'border border-white/15 bg-white/10 text-slate-100/85',
+    accentColor: 'rgba(148, 163, 184, 0.6)',
     icon: <Rocket className="h-3.5 w-3.5" />,
   },
   work: {
     label: 'In Progress',
-    badgeClass: 'border-sky-500/30 bg-sky-500/15 text-sky-200',
+    badgeClass: 'border border-sky-400/35 bg-sky-500/15 text-sky-100',
+    accentColor: 'rgba(56, 189, 248, 0.65)',
     icon: <Wrench className="h-3.5 w-3.5" />,
   },
   deploy: {
-    label: 'Deploy',
-    badgeClass: 'border-emerald-500/30 bg-emerald-500/15 text-emerald-200',
+    label: 'Deployed',
+    badgeClass: 'border border-emerald-400/35 bg-emerald-500/15 text-emerald-100',
+    accentColor: 'rgba(16, 185, 129, 0.65)',
     icon: <Rocket className="h-3.5 w-3.5" />,
   },
   cloaking: {
     label: 'Cloaking',
-    badgeClass: 'border-purple-500/30 bg-purple-500/15 text-purple-200',
+    badgeClass: 'border border-purple-400/35 bg-purple-500/15 text-purple-100',
+    accentColor: 'rgba(168, 85, 247, 0.65)',
     icon: <EyeOff className="h-3.5 w-3.5" />,
+  },
+  archived: {
+    label: 'Archived',
+    badgeClass: 'border border-rose-400/35 bg-rose-500/15 text-rose-100',
+    accentColor: 'rgba(244, 63, 94, 0.6)',
+    icon: <Archive className="h-3.5 w-3.5" />,
   },
 };
 
@@ -242,7 +256,8 @@ const deriveProjectStatus = (row: ProjectRecord): ProjectStatusKey => {
   if ([status, metaMode].some((value) => value.includes('cloak'))) return 'cloaking';
   if ([status, metaMode].some((value) => value.includes('deploy') || value.includes('publish') || value.includes('live'))) return 'deploy';
   if ([status, metaMode].some((value) => value.includes('draft') || value.includes('work') || value.includes('pending'))) return 'work';
-  return 'work';
+  if ([status, metaMode].some((value) => value.includes('archive'))) return 'archived';
+  return 'all';
 };
 
 const normalizeCachedMessage = (entry: any): ChatMessage | null => {
@@ -525,8 +540,15 @@ export function SitePreview({
           updated_by: userId,
         }));
         if (rows.length) {
-          const { error: upErr } = await sb.from('site_files').upsert(rows, { onConflict: 'site_id,path' });
-          if (upErr) console.error('Supabase upsert error (site_files):', upErr);
+          const chunkSize = 40;
+          for (let i = 0; i < rows.length; i += chunkSize) {
+            const slice = rows.slice(i, i + chunkSize);
+            const { error: upErr } = await sb.from('site_files').upsert(slice, { onConflict: 'site_id,path' });
+            if (upErr) {
+              console.error('Supabase upsert error (site_files):', upErr);
+              break;
+            }
+          }
         }
       } catch (e: any) {
         console.error('Persist init failed', e?.message || e);
@@ -693,6 +715,25 @@ export function SitePreview({
   const projectsTotalPages = Math.max(1, Math.ceil(filteredProjects.length / PROJECTS_PAGE_SIZE));
   const projectsCurrentPage = Math.min(projectsPage, projectsTotalPages);
   const paginatedProjects = filteredProjects.slice((projectsCurrentPage - 1) * PROJECTS_PAGE_SIZE, projectsCurrentPage * PROJECTS_PAGE_SIZE);
+
+  const groupedProjects = useMemo(() => {
+    const buckets = new Map<ProjectStatusKey, ProjectRecord[]>();
+    paginatedProjects.forEach((project) => {
+      const resolved = deriveProjectStatus(project);
+      const bucketKey = PROJECT_GROUP_ORDER.includes(resolved) ? resolved : 'all';
+      const list = buckets.get(bucketKey) ?? [];
+      list.push(project);
+      buckets.set(bucketKey, list);
+    });
+    return PROJECT_GROUP_ORDER
+      .filter((key) => (buckets.get(key) ?? []).length > 0)
+      .map((key) => ({
+        key,
+        label: key === 'all' ? 'Other' : PROJECT_STATUS_STYLES[key].label,
+        accent: PROJECT_STATUS_STYLES[key].accentColor,
+        projects: buckets.get(key) ?? [],
+      }));
+  }, [paginatedProjects]);
 
   useEffect(() => {
     if (projectsPage !== projectsCurrentPage) setProjectsPage(projectsCurrentPage);
@@ -1038,7 +1079,11 @@ export function SitePreview({
     const batch = entries.map(([path, content]) => ({ site_id: siteId!, path, content, updated_by: userId }));
     try {
       pendingSavesRef.current = {};
-      await sb.from('site_files').upsert(batch, { onConflict: 'site_id,path' });
+      const chunkSize = 40;
+      for (let i = 0; i < batch.length; i += chunkSize) {
+        const slice = batch.slice(i, i + chunkSize);
+        await sb.from('site_files').upsert(slice, { onConflict: 'site_id,path' });
+      }
       await sb.from('sites').update({ updated_at: new Date().toISOString(), last_opened_at: new Date().toISOString() }).eq('id', siteId);
     } catch (e) {
       // keep pending in case of failure
@@ -1677,7 +1722,10 @@ export function SitePreview({
                             if (e.key === 'Escape') setRenamingPath(null);
                           }}
                           autoFocus
-                          onFocus={e => e.target.select()}
+                          onFocus={e => {
+                            const length = e.currentTarget.value.length;
+                            e.currentTarget.setSelectionRange(length, length);
+                          }}
                           className="h-6 text-xs bg-card-foreground/10 border-accent"
                           onClick={e => e.stopPropagation()}
                         />
@@ -1742,7 +1790,10 @@ export function SitePreview({
                           if (e.key === 'Escape') setRenamingPath(null);
                         }}
                         autoFocus
-                        onFocus={e => e.target.select()}
+                        onFocus={e => {
+                          const length = e.currentTarget.value.length;
+                          e.currentTarget.setSelectionRange(length, length);
+                        }}
                         className="h-6 text-xs bg-card-foreground/10 border-accent"
                         onClick={e => e.stopPropagation()}
                       />
@@ -2707,6 +2758,10 @@ export function SitePreview({
           // Make selection visible, as it's not by default in vs-dark when customized
           'editor.selectionBackground': '#264f78',
           'editor.selectionHighlightBackground': '#add6ff26',
+          'editor.selectionForeground': '#ffffff',
+          'editor.selectionHighlightBorder': '#5c7db833',
+          'editor.lineHighlightBackground': '#2a2f3d66',
+          'editorCursor.foreground': '#a9d7ff',
         },
       });
       monaco.editor.setTheme('webgenius-dark');
@@ -2872,15 +2927,25 @@ export function SitePreview({
           }
         }}
       >
-        <DialogContent className="max-w-3xl border border-white/10 bg-[#05070f] text-slate-100">
-          <div className="space-y-6">
-            <DialogHeader className="space-y-1">
-              <DialogTitle className="text-2xl font-semibold text-white">My Projects</DialogTitle>
-              <p className="text-sm text-slate-400">Drafts, deploys, and cloaked versions in one place.</p>
-            </DialogHeader>
+        <DialogContent className="w-[98vw] h-[96vh] sm:w-[98vw] sm:h-[96vh] max-w-none overflow-hidden border border-white/10 bg-[#05070f] text-slate-100 p-0 rounded-xl md:rounded-2xl gap-0">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="space-y-6 px-6 py-6 sm:px-8 sm:py-7">
+              <div className="flex items-start justify-between gap-3">
+                <DialogHeader className="space-y-1 text-left">
+                  <DialogTitle className="text-2xl font-semibold text-white sm:text-3xl">My Projects</DialogTitle>
+                  <p className="text-sm text-slate-400">Drafts, deploys, and cloaked versions in one place.</p>
+                </DialogHeader>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="sm:hidden rounded-full border border-white/10 bg-white/5 px-3 text-xs font-medium text-slate-200 hover:border-sky-400/50 hover:text-white"
+                  onClick={() => setIsProjectsOpen(false)}
+                >
+                  Back to editor
+                </Button>
+              </div>
 
-            <div className="rounded-2xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-6">
-              <div className="flex flex-col gap-4">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                   <div className="relative flex-1">
                     <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -2888,7 +2953,7 @@ export function SitePreview({
                       placeholder="Search by name or domain"
                       value={projectsSearch}
                       onChange={(event) => setProjectsSearch(event.target.value)}
-                      className="h-11 rounded-2xl border-white/10 bg-white/[0.04] pl-11 text-sm text-white placeholder:text-slate-500 focus-visible:border-sky-500/60 focus-visible:ring-sky-500/40"
+                      className="h-11 rounded-2xl border-white/10 bg-white/[0.04] pl-11 text-sm text-white placeholder:text-slate-500 focus-visible:border-white/10 focus-visible:ring-0"
                     />
                   </div>
                   <div className="w-full sm:w-auto">
@@ -2905,12 +2970,12 @@ export function SitePreview({
                   </div>
                 </div>
                 <Tabs value={projectsPreset} onValueChange={(value) => setProjectsPreset(value as ProjectStatusKey)}>
-                  <TabsList className="flex flex-wrap gap-2 rounded-xl border border-white/5 bg-white/5 p-2">
+                  <TabsList className="mt-4 grid grid-cols-2 gap-2 p-0 sm:flex sm:flex-wrap">
                     {PROJECT_STATUS_PRESETS.map((preset) => (
                       <TabsTrigger
                         key={preset.key}
                         value={preset.key}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-transparent px-4 py-2 text-xs font-medium text-slate-200 transition data-[state=active]:border-sky-400/50 data-[state=active]:bg-sky-400/10 data-[state=active]:text-white sm:flex-none"
+                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-transparent px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-0 data-[state=active]:bg-sky-500/20 data-[state=active]:text-white sm:flex-none"
                       >
                         {PROJECT_STATUS_STYLES[preset.key].icon}
                         <span>{PROJECT_STATUS_STYLES[preset.key].label}</span>
@@ -2922,11 +2987,13 @@ export function SitePreview({
             </div>
 
             {projectsError ? (
-              <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">{projectsError}</div>
+              <div className="px-6 pb-4 sm:px-8">
+                <div className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">{projectsError}</div>
+              </div>
             ) : null}
 
-            <ScrollArea className="h-[52vh] pr-2">
-              <div className="space-y-4 pb-4">
+            <ScrollArea className="flex-1 min-h-0 px-6 pb-6 pr-1 sm:px-8">
+              <div className="flex flex-col gap-4 pb-2">
                 {projectsLoading ? (
                   <div className="flex justify-center py-12 text-slate-400">
                     <Loader2 className="h-5 w-5 animate-spin" />
@@ -2936,76 +3003,86 @@ export function SitePreview({
                     No projects match this view yet.
                   </div>
                 ) : (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {paginatedProjects.map((project) => {
-                      const domain = deriveProjectDomain(project);
-                      const liveUrl = domain ? toExternalUrl(domain) : null;
-                      return (
+                  <div className="board-panel">
+                    <div className="board-header">
+                      <span>Project</span>
+                      <span>Domain</span>
+                      <span>Updated</span>
+                      <span>Status</span>
+                      <span className="text-right">Actions</span>
+                    </div>
+                    <div className="board-body">
+                      {groupedProjects.map((group) => (
                         <div
-                          key={project.id}
-                          className="group relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-br from-[#111827] via-[#0b1120] to-[#05060b] p-5 shadow-lg transition-transform duration-200 hover:-translate-y-1 hover:border-sky-400/50"
+                          key={group.key}
+                          className="board-group"
+                          style={{ ['--group-accent' as any]: group.accent }}
                         >
-                        <div className="absolute inset-0 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-hover:[background:radial-gradient(circle_at_top,_rgba(56,189,248,0.12),_transparent_55%)]" />
-                        <div className="relative flex flex-col gap-5">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="space-y-1.5">
-                              <button
-                                className="text-left text-base font-semibold text-white hover:text-sky-300"
-                                onClick={() => handleProjectOpen(project)}
-                              >
-                                {project.name}
-                              </button>
-                              <p className="text-[11px] uppercase tracking-[0.25em] text-slate-500">{project.slug}</p>
-                            </div>
-                            {renderProjectBadge(project)}
-                          </div>
-                          <div className="space-y-1 text-xs text-slate-400">
-                            <div className="flex items-center justify-between">
-                                <span>Updated</span>
-                              <span>{new Date(project.updated_at).toLocaleString()}</span>
-                            </div>
-                            {domain ? (
-                              <div className="flex items-center justify-between">
-                                <span>Domain</span>
-                                <span className="truncate text-slate-200">{domain}</span>
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                className="rounded-xl bg-sky-500/90 px-4 text-xs font-medium text-white shadow-sm transition hover:bg-sky-400"
-                                onClick={() => handleProjectOpen(project)}
-                              >
-                                Open
-                              </Button>
-                              {liveUrl ? (
+                          <div className="board-group-header">{group.label}</div>
+                          {group.projects.map((project) => {
+                            const domain = deriveProjectDomain(project);
+                            const liveUrl = domain ? toExternalUrl(domain) : null;
+                            return (
+                              <div key={project.id} className="board-row">
+                                <div className="board-cell">
+                                  <button
+                                    className="board-title text-left hover:text-sky-300 transition"
+                                    onClick={() => handleProjectOpen(project)}
+                                  >
+                                    {project.name}
+                                  </button>
+                                  <span className="board-subtitle">{project.slug}</span>
+                                </div>
+                                <div className="board-cell">
+                                  <span className="board-label">Domain</span>
+                                  <span className="board-meta truncate">{domain || '—'}</span>
+                                </div>
+                                <div className="board-cell board-cell--meta-right">
+                                  <span className="board-label">Updated</span>
+                                  <span className="board-meta">{new Date(project.updated_at).toLocaleString()}</span>
+                                </div>
+                                <div className="board-cell board-cell--status">
+                                  <span className="board-label">Status</span>
+                                  {renderProjectBadge(project)}
+                                </div>
+                                <div className="board-cell board-cell--actions">
+                                  <span className="board-label">Actions</span>
+                              <div className="board-actions">
                                 <Button
-                                  asChild
+                                  size="sm"
+                                  className="h-8 rounded-md bg-[#3b82f6] px-4 text-xs font-medium text-white transition-colors hover:bg-[#2563eb]"
+                                  onClick={() => handleProjectOpen(project)}
+                                >
+                                  Open
+                                </Button>
+                                {liveUrl ? (
+                                  <Button
+                                    asChild
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 rounded-md border border-slate-500/40 bg-transparent px-3 text-xs font-medium text-slate-200 transition-colors hover:border-slate-400/60 hover:bg-slate-500/10 hover:text-white"
+                                  >
+                                    <a href={liveUrl} target="_blank" rel="noopener noreferrer">
+                                      <ExternalLink className="mr-1 h-3.5 w-3.5" /> Live site
+                                    </a>
+                                  </Button>
+                                ) : null}
+                                <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                                  className="h-8 rounded-md border border-rose-400/45 bg-transparent px-3 text-xs font-medium text-rose-200 transition-colors hover:border-rose-400 hover:bg-rose-500/10 hover:text-white"
+                                  onClick={() => setProjectsDeleteTarget(project)}
                                 >
-                                  <a href={liveUrl} target="_blank" rel="noopener noreferrer">
-                                    <ExternalLink className="mr-1 h-4 w-4" /> View live
-                                  </a>
+                                  <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
                                 </Button>
-                              ) : null}
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-rose-200 hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
-                              onClick={() => setProjectsDeleteTarget(project)}
-                            >
-                              <Trash2 className="mr-1 h-4 w-4" /> Delete
-                            </Button>
+                              </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                    })}
+                      );
+                          })}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
 
@@ -3018,7 +3095,7 @@ export function SitePreview({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                        className="rounded-full border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
                         onClick={() => setProjectsPage((prev) => Math.max(1, prev - 1))}
                         disabled={projectsCurrentPage === 1}
                       >
@@ -3027,7 +3104,7 @@ export function SitePreview({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                        className="rounded-full border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
                         onClick={() => setProjectsPage((prev) => Math.min(projectsTotalPages, prev + 1))}
                         disabled={projectsCurrentPage === projectsTotalPages}
                       >
@@ -3421,12 +3498,25 @@ export function SitePreview({
                         fontSize: 14,
                         minimap: { enabled: false },
                         automaticLayout: true,
+                        smoothScrolling: true,
+                        cursorBlinking: 'smooth',
+                        cursorSmoothCaretAnimation: true,
+                        mouseWheelScrollSensitivity: 1.1,
+                        fastScrollSensitivity: 5,
+                        scrollBeyondLastColumn: 6,
+                        selectionHighlight: true,
+                        roundedSelection: false,
+                        renderLineHighlight: 'all',
+                        mouseWheelZoom: false,
+                        dragAndDrop: true,
                         scrollbar: {
                           vertical: 'auto',
                           horizontal: 'auto',
                           useShadows: false,
                           verticalScrollbarSize: 4,
                           horizontalScrollbarSize: 4,
+                          handleMouseWheel: true,
+                          arrowSize: 8,
                         },
                       }}
                     />

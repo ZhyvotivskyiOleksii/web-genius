@@ -87,6 +87,14 @@ type SectionSpec = { type: string; titles: ((site: string) => string)[]; details
 
 const IMAGE_FILE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.svg', '.avif']);
 
+const SECTION_ACCENTS = [
+  'section-accent-aurora',
+  'section-accent-wave',
+  'section-accent-grid',
+  'section-accent-noise',
+  'section-accent-lens',
+];
+
 async function listImageFiles(relativeDir: string): Promise<string[]> {
   const baseDir = path.join(process.cwd(), 'public', relativeDir);
   try {
@@ -377,24 +385,28 @@ function createStyleHintPool(themeMode: 'light' | 'dark', isGameSite: boolean): 
     'Compose a split layout with diagonal glass panels, soft drop shadows and animated SVG sparkles',
     'Overlay a faint grid of neon lines and animated particles drifting upward to simulate casino lights',
     'Apply blurred spotlight beams in the background and add rotating geometric accents on the corners',
+    'Mix horizontal scroll galleries, pinned testimonials, and asymmetrical columns so each section feels different',
   ];
 
   const darkOnly = [
     'Create a midnight neon atmosphere with deep purple gradients, glowing borders and animated dust',
     'Blend a cosmic starfield with slow-moving light streaks and reflective card surfaces',
     'Add glossy glassmorphism cards hovering above a smoky background with shimmering edges',
+    'Build a layered starfield with twinkling points, soft nebula clouds, and constellation lines drawn with CSS keyframes',
   ];
 
   const lightOnly = [
     'Use soft peach-to-gold gradients with translucent frosted panels and gentle shadow play',
     'Incorporate watercolor textures with bright highlights and floating translucent bubbles',
     'Design a sunlit lounge vibe with warm gradients, subtle noise textures and animated confetti lines',
+    'Craft a paper collage aesthetic with torn-edge cards, shadowed scraps, and hand-drawn doodle icons',
   ];
 
   const gameExtras = [
     'Center a rotating 3D slot wheel silhouette with glowing reels in the background and layered chips',
     'Feature animated jackpot burst lines behind CTA buttons with shimmering coin trails',
     'Stack cascading card suits using CSS masks and animate them with slow parallax on scroll',
+    'Introduce interactive parallax cards that tilt with pointer movement and catch light with CSS gradients',
   ];
 
   const pool = [
@@ -715,6 +727,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const sectionIdSet = new Set<string>();
     const navAnchors: SectionNavItem[] = [];
     const navKeysSeen = new Set<string>();
+    let accentCursor = 0;
 
     for (let i = 0; i < mainSections.length; i += CHUNK_SIZE) {
       const slice = mainSections.slice(i, i + CHUNK_SIZE);
@@ -750,6 +763,9 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         }
         sectionIdSet.add(candidate);
 
+        const accentClass = SECTION_ACCENTS[accentCursor % SECTION_ACCENTS.length];
+        accentCursor += 1;
+
         if (/^<section\b/i.test(cleanHtml)) {
           cleanHtml = cleanHtml.replace(/^<section\b([^>]*)>/i, (match, attrs) => {
             let updated = attrs || '';
@@ -761,20 +777,24 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
             if (section.type && !/data-section-type=/.test(updated)) {
               updated += ` data-section-type="${section.type}"`;
             }
+            if (!/data-section-accent=/.test(updated)) {
+              updated += ` data-section-accent="${accentClass}"`;
+            }
             if (/class\s*=/.test(updated)) {
               updated = updated.replace(/class\s*=\s*"([^"]*)"/i, (full, classes) => {
                 const appended = classes.split(/\s+/).filter(Boolean);
                 if (!appended.includes('generated-section')) appended.push('generated-section');
+                if (!appended.includes(accentClass)) appended.push(accentClass);
                 return ` class="${appended.join(' ')}"`;
               });
             } else {
-              updated += ' class="generated-section"';
+              updated += ` class="generated-section ${accentClass}"`;
             }
             return `<section${updated}>`;
           });
         } else {
           const sectionTypeAttr = section.type ? ` data-section-type="${section.type}"` : '';
-          cleanHtml = `<section id="${candidate}"${sectionTypeAttr} class="generated-section">${cleanHtml}</section>`;
+          cleanHtml = `<section id="${candidate}"${sectionTypeAttr} data-section-accent="${accentClass}" class="generated-section ${accentClass}">${cleanHtml}</section>`;
         }
 
         const sectionLower = cleanHtml.toLowerCase();

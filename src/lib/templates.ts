@@ -582,7 +582,7 @@ function renderCookieBanner(theme: BrandingTheme): string {
       <div class="${variant.wrapperClass}">
         <div class="flex items-center gap-3 text-sm sm:text-base ${theme.cookieTextClass}">
           <span class="inline-flex h-10 w-10 items-center justify-center rounded-full ${variant.iconClass}" aria-hidden="true">
-            <i class="${variant.icon}"></i>
+            <i class="fa-solid fa-cookie-bite"></i>
           </span>
           <p>${variant.text}</p>
         </div>
@@ -625,13 +625,14 @@ export const getIndexHtmlTemplate = (
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
     <link rel="stylesheet" href="styles/style.css">
     ${faviconTag}
     <style>
       ${appliedTheme.styleBlock}
     </style>
 </head>
-<body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="index">
+<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="index">
     ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index', sectionAnchors, logoAssetPath) : ''}
 
     <main class="${includeHeader ? 'pt-16' : ''}">
@@ -643,6 +644,7 @@ export const getIndexHtmlTemplate = (
     ${renderCookieBanner(appliedTheme)}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.6/bundled/lenis.min.js"></script>
     <script src="scripts/main.js"></script>
 </body>
 </html>
@@ -754,13 +756,14 @@ export const getGamePageTemplate = (
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
+    <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
     <link rel="stylesheet" href="styles/style.css">
     ${faviconTag}
     <style>
       ${appliedTheme.styleBlock}
     </style>
 </head>
-<body class="${appliedTheme.bodyClass}" data-has-game="true" data-page="game">
+<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="true" data-page="game">
     ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game', sectionAnchors, logoAssetPath) : ''}
 
     <main class="flex-grow flex flex-col items-center justify-center p-4">
@@ -792,6 +795,7 @@ export const getGamePageTemplate = (
     ${includeFooter ? renderFooter(title, appliedTheme) : ''}
 
     ${renderCookieBanner(appliedTheme)}
+    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.6/bundled/lenis.min.js"></script>
     <script src="scripts/main.js"></script>
 </body>
 </html>
@@ -846,13 +850,15 @@ export const getPrivacyPolicyTemplate = (
     <title>Privacy Policy - ${title}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
     <link rel="stylesheet" href="styles/style.css">
     ${faviconTag}
     <style>
       ${appliedTheme.styleBlock}
     </style>
 </head>
-<body class="${appliedTheme.bodyClass}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="policy">
+<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="policy">
     ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy', sectionAnchors, logoAssetPath)}
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
@@ -895,6 +901,7 @@ export const getPrivacyPolicyTemplate = (
     ${includeFooter ? renderFooter(title, appliedTheme) : ''}
 
     ${renderCookieBanner(appliedTheme)}
+    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.6/bundled/lenis.min.js"></script>
     <script src="scripts/main.js"></script>
 </body>
 </html>`;
@@ -903,6 +910,27 @@ export const getPrivacyPolicyTemplate = (
 // ... (mainJsTemplate та stylesCssTemplate залишаються без змін) ...
 export const mainJsTemplate = `
 document.addEventListener('DOMContentLoaded', function () {
+    const isEmbedded = (() => {
+        try {
+            return window.self !== window.top;
+        } catch (error) {
+            return true;
+        }
+    })();
+    if (!isEmbedded && window.Lenis) {
+        const lenis = new window.Lenis({
+            lerp: 0.08,
+            smoothWheel: true,
+            wheelMultiplier: 1.05,
+        });
+        function raf(time) {
+            lenis.raf(time);
+            requestAnimationFrame(raf);
+        }
+        requestAnimationFrame(raf);
+    } else {
+        document.body.dataset.smoothScroll = 'native';
+    }
     // --- Mobile Menu Logic ---
     const burgerMenu = document.getElementById('burger-menu');
     const burgerIcon = document.getElementById('burger-icon');
@@ -1151,51 +1179,149 @@ body.overflow-hidden { overflow: hidden; }
 }
 section.generated-section {
     position: relative;
-    padding: clamp(2.5rem, 6vw, 5rem) clamp(1.5rem, 5vw, 4rem);
-    margin: clamp(1.5rem, 4vw, 3.5rem) auto;
-    border-radius: 2.5rem;
-    backdrop-filter: blur(18px);
-    box-shadow: 0 28px 90px rgba(10, 16, 35, 0.28);
-    border: 1px solid rgba(148, 163, 184, 0.14);
+    margin: clamp(1.25rem, 4vw, 3rem) auto;
+    padding: clamp(2rem, 5vw, 4rem) clamp(1.5rem, 4vw, 3.5rem);
+    border-radius: 1.5rem;
+    background: var(--section-surface, rgba(17, 24, 39, 0.86));
+    border: 1px solid var(--section-border, rgba(148, 163, 184, 0.12));
+    box-shadow: var(--section-shadow, 0 22px 60px rgba(8, 12, 24, 0.32));
+    color: inherit;
+    overflow: hidden;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
 }
-section.generated-section:nth-of-type(odd) {
-    background: linear-gradient(145deg, rgba(15,23,42,0.92), rgba(30,41,59,0.75));
-    color: rgba(248, 250, 252, 0.9);
+section.generated-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--section-overlay, transparent);
+    opacity: var(--section-overlay-opacity, 0);
+    mix-blend-mode: var(--section-overlay-blend, normal);
+    pointer-events: none;
+    transition: opacity 0.35s ease;
+    background-size: var(--section-overlay-size, cover);
+    background-position: center;
 }
-section.generated-section:nth-of-type(even) {
-    background: linear-gradient(145deg, rgba(236, 238, 255, 0.16), rgba(148, 163, 184, 0.08));
+section.generated-section:hover::before {
+    opacity: calc(var(--section-overlay-opacity, 0) * 1.05);
 }
+
+body[data-theme-mode="dark"] section.generated-section {
+    --section-surface: rgba(15, 23, 42, 0.88);
+    --section-border: rgba(94, 105, 140, 0.24);
+    --section-shadow: 0 24px 64px rgba(7, 12, 28, 0.45);
+    color: rgba(233, 239, 255, 0.92);
+}
+
+body[data-theme-mode="light"] section.generated-section {
+    --section-surface: rgba(255, 255, 255, 0.94);
+    --section-border: rgba(203, 213, 225, 0.7);
+    --section-shadow: 0 18px 40px rgba(148, 163, 184, 0.22);
+    color: #1f2937;
+}
+
+.section-accent-aurora {
+    --section-overlay: radial-gradient(circle at top left, rgba(120, 255, 214, 0.35), transparent 60%);
+    --section-overlay-opacity: 1;
+}
+
+.section-accent-wave {
+    --section-overlay: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(236, 72, 153, 0.14));
+    --section-overlay-opacity: 1;
+}
+
+.section-accent-grid {
+    --section-overlay: linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(255,255,255,0.05) 1px, transparent 1px);
+    --section-overlay-opacity: 1;
+    --section-overlay-blend: overlay;
+    --section-overlay-size: 24px 24px;
+}
+
+.section-accent-noise {
+    --section-overlay: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="1" numOctaves="4" stitchTiles="stitch"/></filter><rect width="200" height="200" filter="url(#n)" opacity="0.18"/></svg>');
+    --section-overlay-opacity: 1;
+}
+
+.section-accent-lens {
+    --section-overlay: radial-gradient(circle at center, rgba(255,255,255,0.18), transparent 72%);
+    --section-overlay-opacity: 1;
+}
+
+body[data-theme-mode="light"] .section-accent-grid {
+    --section-overlay: linear-gradient(90deg, rgba(17,24,39,0.04) 1px, transparent 1px),
+      linear-gradient(0deg, rgba(17,24,39,0.04) 1px, transparent 1px);
+    --section-overlay-size: 24px 24px;
+}
+
+section.generated-section :where(h1, h2, h3, h4) {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    letter-spacing: -0.01em;
+    margin-bottom: 0.9em;
+}
+
+section.generated-section :where(p) {
+    line-height: 1.7;
+    margin-bottom: 1.1em;
+    opacity: 0.92;
+}
+
+body[data-theme-mode="light"] section.generated-section :where(p) {
+    color: rgba(55, 65, 81, 0.9);
+}
+
+section.generated-section :where(a:not([class*="btn"], [class*="button"])) {
+    text-decoration: underline;
+    text-decoration-thickness: from-font;
+    text-underline-offset: 4px;
+}
+
+body[data-theme-mode="dark"] section.generated-section :where(a) {
+    color: #60a5fa;
+}
+
+body[data-theme-mode="light"] section.generated-section :where(a) {
+    color: #2563eb;
+}
+
 section.generated-section :where(img) {
     display: block;
     width: min(520px, 100%);
     max-height: clamp(220px, 45vh, 520px);
     object-fit: cover;
-    border-radius: 1.75rem;
-    box-shadow: 0 25px 60px rgba(15, 23, 42, 0.35);
-    margin: clamp(1.5rem, 4vw, 3rem) auto;
+    border-radius: 1.2rem;
+    margin: clamp(1.25rem, 3.5vw, 2.75rem) auto;
+    box-shadow: 0 18px 45px rgba(12, 18, 35, 0.25);
 }
+
+body[data-theme-mode="light"] section.generated-section :where(img) {
+    box-shadow: 0 16px 40px rgba(148, 163, 184, 0.24);
+    border: 1px solid rgba(203, 213, 225, 0.45);
+}
+
 section.generated-section :where(figure) {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 1rem;
 }
+
 section.generated-section :where(figcaption) {
     font-size: 0.9rem;
     opacity: 0.7;
     max-width: min(520px, 100%);
     text-align: center;
 }
+
 @media (max-width: 768px) {
     section.generated-section {
-        padding: clamp(1.75rem, 8vw, 3rem) clamp(1.25rem, 6vw, 2.25rem);
-        margin: clamp(1rem, 5vw, 2.5rem) auto;
-        border-radius: 2rem;
+        border-radius: 1.1rem;
+        padding: 1.75rem 1.35rem;
+        margin: 1.25rem auto;
     }
     section.generated-section :where(img) {
-        width: min(420px, 100%);
-        max-height: clamp(180px, 55vw, 360px);
-        border-radius: 1.5rem;
+        border-radius: 1rem;
     }
 }
 .burger-icon.is-open .burger-line:nth-child(1) {

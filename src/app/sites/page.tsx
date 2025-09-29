@@ -71,33 +71,40 @@ const statusPresets: { key: StatusPresetKey; label: string; matches: string[] | 
   { key: "archived", label: "Archived", matches: ["archive", "archived"] },
 ];
 
-const statusStyles: Record<StatusPresetKey, { label: string; badgeClass: string; icon: JSX.Element }> = {
+const statusStyles: Record<StatusPresetKey, { label: string; badgeClass: string; icon: JSX.Element; accentColor: string }> = {
   all: {
     label: "All",
-    badgeClass: "border-white/10 bg-white/5 text-slate-100",
+    badgeClass: "border border-white/15 bg-white/10 text-slate-100/85",
+    accentColor: "rgba(148, 163, 184, 0.6)",
     icon: <Rocket className="h-3.5 w-3.5" />,
   },
   work: {
     label: "In Progress",
-    badgeClass: "border-sky-500/30 bg-sky-500/15 text-sky-200",
+    badgeClass: "border border-sky-400/35 bg-sky-500/15 text-sky-100",
+    accentColor: "rgba(56, 189, 248, 0.65)",
     icon: <Wrench className="h-3.5 w-3.5" />,
   },
   deploy: {
     label: "Deployed",
-    badgeClass: "border-emerald-500/30 bg-emerald-500/15 text-emerald-200",
+    badgeClass: "border border-emerald-400/35 bg-emerald-500/15 text-emerald-100",
+    accentColor: "rgba(16, 185, 129, 0.65)",
     icon: <Rocket className="h-3.5 w-3.5" />,
   },
   cloaking: {
     label: "Cloaking",
-    badgeClass: "border-purple-500/30 bg-purple-500/15 text-purple-200",
+    badgeClass: "border border-purple-400/35 bg-purple-500/15 text-purple-100",
+    accentColor: "rgba(168, 85, 247, 0.65)",
     icon: <EyeOff className="h-3.5 w-3.5" />,
   },
   archived: {
     label: "Archived",
-    badgeClass: "border-rose-500/30 bg-rose-500/15 text-rose-200",
+    badgeClass: "border border-rose-400/35 bg-rose-500/15 text-rose-100",
+    accentColor: "rgba(244, 63, 94, 0.6)",
     icon: <Archive className="h-3.5 w-3.5" />,
   },
 };
+
+const GROUP_ORDER: StatusPresetKey[] = ["work", "deploy", "cloaking", "archived", "all"];
 
 const getProjectDomain = (row: Row): string => {
   const meta = row.meta || null;
@@ -119,7 +126,7 @@ function resolvePreset(row: Row): StatusPresetKey {
   if ([status, metaMode].some((value) => value.includes("deploy") || value.includes("publish") || value.includes("live"))) return "deploy";
   if ([status, metaMode].some((value) => value.includes("archive"))) return "archived";
   if ([status, metaMode].some((value) => value.includes("draft") || value.includes("work") || value.includes("pending"))) return "work";
-  return "work";
+  return "all";
 }
 
 export default function MySitesPage() {
@@ -237,6 +244,25 @@ export default function MySitesPage() {
   const currentPage = Math.min(page, totalPages);
   const paginatedRows = filteredRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  const groupedRows = useMemo(() => {
+    const buckets = new Map<StatusPresetKey, Row[]>();
+    paginatedRows.forEach((row) => {
+      const resolved = resolvePreset(row);
+      const bucketKey = GROUP_ORDER.includes(resolved) ? resolved : "all";
+      const list = buckets.get(bucketKey) ?? [];
+      list.push(row);
+      buckets.set(bucketKey, list);
+    });
+    return GROUP_ORDER
+      .filter((key) => (buckets.get(key) ?? []).length > 0)
+      .map((key) => ({
+        key,
+        label: key === "all" ? "Other" : statusStyles[key].label,
+        accent: statusStyles[key].accentColor,
+        rows: buckets.get(key) ?? [],
+      }));
+  }, [paginatedRows]);
+
   useEffect(() => {
     if (page !== currentPage) setPage(currentPage);
   }, [currentPage, page]);
@@ -314,7 +340,7 @@ export default function MySitesPage() {
                   placeholder="Search by name, domain, or slug"
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  className="h-12 rounded-2xl border-white/10 bg-transparent pl-11 text-base text-white placeholder:text-slate-500 focus-visible:border-sky-500/60 focus-visible:ring-sky-500/40"
+                  className="h-12 rounded-2xl border-white/10 bg-transparent pl-11 text-base text-white placeholder:text-slate-500 focus-visible:border-white/10 focus-visible:ring-0"
                 />
               </div>
               <div className="flex w-full gap-3 sm:w-auto">
@@ -332,12 +358,12 @@ export default function MySitesPage() {
             </div>
 
             <Tabs value={activePreset} onValueChange={(value) => setActivePreset(value as StatusPresetKey)}>
-              <TabsList className="control-surface grid grid-cols-2 gap-2 border border-white/10 bg-white/[0.02] p-2 sm:flex sm:flex-wrap">
+              <TabsList className="grid grid-cols-2 gap-2 p-0 sm:flex sm:flex-wrap">
                 {statusPresets.map((preset) => (
                   <TabsTrigger
                     key={preset.key}
                     value={preset.key}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-transparent px-4 py-2 text-sm font-medium text-slate-200 transition data-[state=active]:border-sky-400/60 data-[state=active]:bg-sky-400/15 data-[state=active]:text-white"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-transparent px-4 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/5 hover:text-white focus-visible:outline-none focus-visible:ring-0 data-[state=active]:bg-sky-500/20 data-[state=active]:text-white"
                   >
                     {statusStyles[preset.key].icon}
                     <span>{statusStyles[preset.key].label}</span>
@@ -393,63 +419,85 @@ export default function MySitesPage() {
               <p className="max-w-md text-sm text-slate-400">Try adjusting the filters or create a new project to bring this feed to life.</p>
             </Card>
           ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {paginatedRows.map((row) => {
-                const domain = getProjectDomain(row);
-                return (
-                  <div key={row.id} className="card-veil p-6 md:p-7">
-                    <div className="flex flex-col gap-6">
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="space-y-2">
-                          <h2 className="text-xl font-semibold text-white line-clamp-1">{row.name}</h2>
-                          <p className="text-[11px] uppercase tracking-[0.28em] text-slate-500">{row.slug}</p>
-                        </div>
-                        {renderStatus(row)}
-                      </div>
-
-                      <div className="grid gap-3 text-sm text-slate-300 sm:grid-cols-2">
-                        <div className="space-y-1 text-xs text-slate-400">
-                          <span className="text-slate-500">Updated</span>
-                          <p className="text-slate-200">{new Date(row.updated_at).toLocaleString()}</p>
-                        </div>
-                        <div className="space-y-1 text-xs text-slate-400">
-                          <span className="text-slate-500">Domain</span>
-                          <p className="truncate text-slate-200">{domain}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex gap-2">
-                          <Link href={`/editor/${row.id}`}>
-                            <Button className="rounded-full bg-sky-500/90 px-5 py-2 text-sm font-medium text-white shadow-[0_12px_32px_rgba(59,130,246,0.35)] transition hover:bg-sky-400/90" size="sm">
-                              Open
-                            </Button>
-                          </Link>
-                          <Link href={toExternalUrl(domain)} target="_blank">
-                            <Button
-                              variant="ghost"
-                              className="rounded-full border border-white/10 bg-white/5 px-4 text-xs font-medium text-slate-200 hover:border-sky-400/50 hover:text-white"
-                              size="sm"
+            <div className="board-panel">
+              <div className="board-header">
+                <span>Project</span>
+                <span>Domain</span>
+                <span>Updated</span>
+                <span>Status</span>
+                <span className="text-right">Actions</span>
+              </div>
+              <div className="board-body">
+                {groupedRows.map((group) => (
+                  <div
+                    key={group.key}
+                    className="board-group"
+                    style={{ ['--group-accent' as any]: group.accent }}
+                  >
+                    <div className="board-group-header">{group.label}</div>
+                    {group.rows.map((row) => {
+                      const domain = getProjectDomain(row);
+                      const domainUrl = domain ? toExternalUrl(domain) : null;
+                      return (
+                        <div key={row.id} className="board-row">
+                          <div className="board-cell">
+                            <Link
+                              href={`/editor/${row.id}`}
+                              className="board-title hover:text-sky-300 transition"
                             >
-                              <ExternalLink className="mr-1 h-4 w-4" />
-                              Live site
-                            </Button>
-                          </Link>
+                              {row.name}
+                            </Link>
+                            <span className="board-subtitle">{row.slug}</span>
+                          </div>
+                          <div className="board-cell">
+                            <span className="board-label">Domain</span>
+                            <span className="board-meta truncate">{domain || '—'}</span>
+                          </div>
+                          <div className="board-cell board-cell--meta-right">
+                            <span className="board-label">Updated</span>
+                            <span className="board-meta">{new Date(row.updated_at).toLocaleString()}</span>
+                          </div>
+                          <div className="board-cell board-cell--status">
+                            <span className="board-label">Status</span>
+                            {renderStatus(row)}
+                          </div>
+                          <div className="board-cell board-cell--actions">
+                            <span className="board-label">Actions</span>
+                            <div className="board-actions">
+                              <Link href={`/editor/${row.id}`}>
+                                <Button size="sm" className="h-8 rounded-md bg-[#3b82f6] px-4 text-xs font-medium text-white transition-colors hover:bg-[#2563eb]">
+                                  Open
+                                </Button>
+                              </Link>
+                              {domainUrl ? (
+                                <Link href={domainUrl} target="_blank">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 rounded-md border border-slate-500/40 bg-transparent px-3 text-xs font-medium text-slate-200 transition-colors hover:border-slate-400/60 hover:bg-slate-500/10 hover:text-white"
+                                  >
+                                    <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                                    Live site
+                                  </Button>
+                                </Link>
+                              ) : null}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 rounded-md border border-rose-400/45 bg-transparent px-3 text-xs font-medium text-rose-200 transition-colors hover:border-rose-400 hover:bg-rose-500/10 hover:text-white"
+                                onClick={() => setDeleteTarget(row)}
+                              >
+                                <Trash2 className="mr-1 h-3.5 w-3.5" />
+                                Delete
+                              </Button>
+                            </div>
+                          </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          className="rounded-full border border-white/10 bg-white/5 px-4 text-xs font-medium text-rose-200 hover:border-rose-400/50 hover:bg-rose-500/20 hover:text-white"
-                          size="sm"
-                          onClick={() => setDeleteTarget(row)}
-                        >
-                          <Trash2 className="mr-1 h-4 w-4" />
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
           )}
 
@@ -511,7 +559,7 @@ export default function MySitesPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                  className="rounded-full border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
                   onClick={() => setPage((prev) => Math.max(1, prev - 1))}
                   disabled={currentPage === 1}
                 >
@@ -520,7 +568,7 @@ export default function MySitesPage() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="rounded-xl border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
+                  className="rounded-full border border-white/10 bg-white/5 px-3 text-xs text-slate-200 hover:border-sky-400/50 hover:text-white"
                   onClick={() => setPage((prev) => Math.min(totalPages, prev + 1))}
                   disabled={currentPage === totalPages}
                 >

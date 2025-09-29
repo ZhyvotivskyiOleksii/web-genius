@@ -1691,8 +1691,12 @@ export async function upsertSiteFilesAction(prev: any, formData: FormData) {
     if (!site) return { success: false, error: 'Not found' };
     const rows = Object.entries(changes).map(([path, content]) => ({ site_id: siteId, path, content, updated_by: userId }));
     if (rows.length) {
-      const { error } = await sb.from('site_files').upsert(rows, { onConflict: 'site_id,path' });
-      if (error) return { success: false, error: error.message };
+      const chunkSize = 40;
+      for (let i = 0; i < rows.length; i += chunkSize) {
+        const slice = rows.slice(i, i + chunkSize);
+        const { error } = await sb.from('site_files').upsert(slice, { onConflict: 'site_id,path' });
+        if (error) return { success: false, error: error.message };
+      }
       await sb.from('sites').update({ updated_at: new Date().toISOString(), last_opened_at: new Date().toISOString() }).eq('id', siteId);
     }
     return { success: true };

@@ -194,6 +194,188 @@
     font-size: 1.7rem;
     line-height: 1.2;
     letter-spacing: -0.02em;
+    display: block;
+    text-align: right;
+  }
+
+  .board-panel {
+    border-radius: 14px;
+    border: 1px solid rgba(70, 86, 145, 0.35);
+    background: #111725;
+    overflow: hidden;
+  }
+
+  .board-header {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: center;
+    padding: 0.45rem 1.2rem;
+    background: #161d33;
+    border-bottom: 1px solid rgba(74, 88, 165, 0.35);
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(199, 207, 250, 0.72);
+  }
+
+  .board-body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .board-group {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid rgba(62, 74, 120, 0.28);
+    position: relative;
+  }
+
+  .board-group:first-of-type {
+    border-top: none;
+  }
+
+  .board-group-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 1.2rem;
+    background: #171f34;
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(210, 218, 255, 0.76);
+    z-index: 1;
+  }
+
+  .board-group-header::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 999px;
+    background: var(--group-accent, rgba(96, 165, 250, 0.75));
+    box-shadow: 0 0 8px var(--group-accent, rgba(96, 165, 250, 0.35));
+  }
+
+  .board-row {
+    display: grid;
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr);
+    align-items: center;
+    padding: 0.55rem 1.2rem;
+    column-gap: 0.75rem;
+    border-top: 1px solid rgba(53, 64, 112, 0.25);
+    background: rgba(15, 20, 34, 0.9);
+    transition: background 0.15s ease;
+    position: relative;
+    z-index: 1;
+  }
+
+  .board-group > .board-row:first-of-type {
+    border-top: none;
+  }
+
+  .board-group > .board-row:nth-of-type(even) {
+    background: rgba(18, 24, 40, 0.92);
+  }
+
+  .board-row:hover {
+    background: rgba(40, 52, 88, 0.5);
+  }
+
+  .board-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .board-cell--status {
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .board-cell--actions {
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .board-cell--meta-right {
+    align-items: flex-end;
+  }
+
+  .board-cell--meta-right .board-meta {
+    text-align: right;
+    width: 100%;
+  }
+
+  .board-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+
+  .board-title {
+    font-size: 0.86rem;
+    font-weight: 600;
+    color: rgba(235, 240, 255, 0.95);
+  }
+
+  .board-subtitle {
+    font-size: 0.52rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: rgba(151, 165, 190, 0.55);
+  }
+
+  .board-meta {
+    font-size: 0.74rem;
+    color: rgba(204, 212, 244, 0.78);
+  }
+
+  .board-label {
+    display: none;
+  }
+
+  @media (max-width: 1024px) {
+    .board-header {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.05fr) minmax(0, 0.9fr) minmax(0, 1.05fr);
+    }
+    .board-row {
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1.05fr) minmax(0, 0.9fr) minmax(0, 1.05fr);
+    }
+  }
+
+  @media (max-width: 860px) {
+    .board-header {
+      display: none;
+    }
+    .board-group-header {
+      padding: 0.6rem 1rem 0.6rem 1.5rem;
+      font-size: 0.6rem;
+    }
+    .board-row {
+      grid-template-columns: 1fr;
+      gap: 0.6rem;
+      padding: 0.85rem 1rem;
+    }
+    .board-cell {
+      gap: 0.2rem;
+    }
+    .board-label {
+      display: block;
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: rgba(148, 163, 184, 0.6);
+    }
+    .board-cell--actions {
+      align-items: flex-start;
+    }
+    .board-actions {
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
   }
 
   .status-pill {
