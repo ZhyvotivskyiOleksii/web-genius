@@ -505,7 +505,7 @@ const footerVariants: FooterVariant[] = [
             </div>
             <div class="rounded-2xl border ${accentBorder} p-5">
               <h4 class="font-semibold mb-2">Need policy details?</h4>
-              <p class="${textMuted} text-sm">Our privacy stance is transparent and human-readable. <a href="privacy-policy.html" class="underline hover:text-indigo-300">Review the policy</a>.</p>
+              <p class="${textMuted} text-sm">Our privacy stance is transparent and human-readable. <a href="privacy-policy.html" class="hover:text-indigo-300">Review the policy</a>.</p>
             </div>
           </div>
         </div>
@@ -588,7 +588,7 @@ function renderCookieBanner(theme: BrandingTheme): string {
         </div>
         <div class="flex items-center gap-3">
           <button id="accept-cookies" class="${theme.cookieButtonClass}">Accept</button>
-          <a href="privacy-policy.html#cookies" class="text-xs sm:text-sm underline hover:text-white/80">Cookie policy</a>
+          <a href="privacy-policy.html#cookies" class="text-xs sm:text-sm hover:text-white/80">Cookie policy</a>
         </div>
       </div>
     </div>
@@ -836,8 +836,8 @@ export const getPrivacyPolicyTemplate = (
     ? 'block text-[#566094] hover:text-[#1f2440] transition-colors duration-200'
     : 'block text-gray-400 hover:text-indigo-400 transition-colors duration-200';
   const contactLinkClass = appliedTheme.mode === 'light'
-    ? 'text-[#3a4fff] font-semibold hover:underline'
-    : 'text-indigo-400 font-semibold hover:underline';
+    ? 'text-[#3a4fff] font-semibold hover:text-[#1f2440]'
+    : 'text-indigo-400 font-semibold hover:text-white';
   const sidebarWrapperClass = appliedTheme.mode === 'light'
     ? 'sticky top-24 rounded-2xl border border-[#dbe2ff] bg-white/90 p-6 shadow-[0_14px_36px_rgba(120,130,255,0.15)]'
     : 'sticky top-24 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-[0_22px_45px_rgba(10,5,40,0.55)] backdrop-blur';
@@ -1271,10 +1271,8 @@ body[data-theme-mode="light"] section.generated-section :where(p) {
     color: rgba(55, 65, 81, 0.9);
 }
 
-section.generated-section :where(a:not([class*="btn"], [class*="button"])) {
-    text-decoration: underline;
-    text-decoration-thickness: from-font;
-    text-underline-offset: 4px;
+section.generated-section :where(a) {
+    text-decoration: none;
 }
 
 body[data-theme-mode="dark"] section.generated-section :where(a) {

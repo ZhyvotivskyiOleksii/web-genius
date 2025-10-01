@@ -3,6 +3,57 @@
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabaseClient";
 
+const PreviewLoader = () => (
+  <div className="wg-preview-loader">
+    <div className="wg-spinner" />
+    <p>Loading preview…</p>
+    <style jsx>{`
+      .wg-preview-loader {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: radial-gradient(circle at top, rgba(76, 29, 149, 0.28), rgba(11, 16, 31, 0.96));
+        color: #cbd5ff;
+        font-family: 'Inter', system-ui, sans-serif;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        z-index: 10;
+      }
+
+      .wg-spinner {
+        width: 64px;
+        height: 64px;
+        border-radius: 9999px;
+        border: 3px solid rgba(99, 102, 241, 0.2);
+        border-top-color: rgba(99, 102, 241, 0.85);
+        animation: wg-spin 0.9s linear infinite;
+        box-shadow: 0 0 35px rgba(79, 70, 229, 0.38);
+      }
+
+      @keyframes wg-spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+
+      @media (max-width: 768px) {
+        .wg-preview-loader {
+          gap: 14px;
+          letter-spacing: 0.12em;
+          font-size: 12px;
+        }
+        .wg-spinner {
+          width: 52px;
+          height: 52px;
+        }
+      }
+    `}</style>
+  </div>
+);
+
 function buildHtml(files: Record<string, string>, path: string) {
   const html = files[path] || files['index.html'] || '<!doctype html><title>Preview</title>';
   let processed = html;
@@ -44,6 +95,70 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
   const html = useMemo(() => (files ? buildHtml(files, currentPath) : ''), [files, currentPath]);
   const sbRef = useRef<any>(null);
 
+  // Hydrate from sessionStorage cache first for instant preview when available
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const keys = [`wg-preview-${siteId}`, `wg-cache-${siteId}`];
+    for (const key of keys) {
+      try {
+        const raw = window.sessionStorage.getItem(key);
+        if (!raw) continue;
+        const parsed = JSON.parse(raw);
+        const cachedFiles = parsed?.files;
+        if (cachedFiles && typeof cachedFiles === 'object') {
+          setFiles((prev) => prev ?? cachedFiles);
+          break;
+        }
+      } catch (cacheErr) {
+        console.warn('Preview cache hydration failed:', cacheErr);
+      }
+    }
+  }, [siteId]);
+
+  // Listen for postMessage syncs from the editor window
+  useEffect(() => {
+    const handler = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+      if (data.type === 'wg-preview-sync' && (!data.siteId || data.siteId === siteId)) {
+        if (data.files && typeof data.files === 'object') {
+          setFiles(data.files as Record<string, string>);
+          try {
+            if (typeof window !== 'undefined') {
+              window.sessionStorage.setItem(`wg-preview-${siteId}`, JSON.stringify({ files: data.files }));
+            }
+          } catch (storeErr) {
+            console.warn('Preview cache store failed:', storeErr);
+          }
+        }
+        if (typeof data.currentPath === 'string') {
+          setCurrentPath(data.currentPath);
+        }
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, [siteId]);
+
+  // Request freshest files from the opener/editor as soon as possible
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const payload = { type: 'wg-preview-request', siteId, path: currentPath };
+    const target = window.opener && !window.opener.closed
+      ? window.opener
+      : window.parent !== window
+        ? window.parent
+        : null;
+    if (target) {
+      try {
+        target.postMessage(payload, '*');
+      } catch (err) {
+        console.warn('Preview sync request failed:', err);
+      }
+    }
+  // we intentionally re-run if currentPath changes so the editor can align routing
+  }, [siteId, currentPath]);
+
   useEffect(() => {
     (async () => {
       try {
@@ -54,6 +169,13 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
         const map: Record<string,string> = {};
         (data || []).forEach((f: any) => { map[f.path] = f.content; });
         setFiles(map);
+        try {
+          if (typeof window !== 'undefined') {
+            window.sessionStorage.setItem(`wg-preview-${siteId}`, JSON.stringify({ files: map }));
+          }
+        } catch (storeErr) {
+          console.warn('Preview cache store failed:', storeErr);
+        }
       } catch (e: any) {
         setErr(e?.message || 'Failed to load');
       }
@@ -72,6 +194,13 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
           const map: Record<string,string> = {};
           (data || []).forEach((f: any) => { map[f.path] = f.content; });
           setFiles(map);
+          try {
+            if (typeof window !== 'undefined') {
+              window.sessionStorage.setItem(`wg-preview-${siteId}`, JSON.stringify({ files: map }));
+            }
+          } catch (storeErr) {
+            console.warn('Preview cache store failed:', storeErr);
+          }
         })
         .subscribe();
       return () => { (sb as any).removeChannel(channel); };
@@ -91,7 +220,16 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
         // shallow diff
         const now = JSON.stringify(map);
         const prev = JSON.stringify(files || {});
-        if (now !== prev) setFiles(map);
+        if (now !== prev) {
+          setFiles(map);
+          try {
+            if (typeof window !== 'undefined') {
+              window.sessionStorage.setItem(`wg-preview-${siteId}`, JSON.stringify({ files: map }));
+            }
+          } catch (storeErr) {
+            console.warn('Preview cache store failed:', storeErr);
+          }
+        }
       }, 2000);
     })();
     return () => { if (timer) clearInterval(timer); };
@@ -108,7 +246,19 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
     return () => window.removeEventListener('message', onMsg);
   }, []);
 
-  if (err) return <div style={{padding:16,color:'#ccc'}}>Error: {err}</div>;
-  if (!files) return <div style={{padding:16,color:'#ccc'}}>Loading…</div>;
-  return <iframe title="Live Preview" style={{border:0,width:'100vw',height:'100vh'}} sandbox="allow-scripts allow-same-origin allow-pointer-lock" srcDoc={html} />;
+  if (err) {
+    return <div style={{ padding: 16, color: '#ccc', fontFamily: 'Inter, system-ui, sans-serif' }}>Error: {err}</div>;
+  }
+  if (!files) {
+    return <PreviewLoader />;
+  }
+
+  return (
+    <iframe
+      title="Live Preview"
+      style={{ border: 0, width: '100vw', height: '100vh' }}
+      sandbox="allow-scripts allow-same-origin allow-pointer-lock"
+      srcDoc={html}
+    />
+  );
 }

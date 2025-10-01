@@ -142,17 +142,68 @@ type ElementTarget = {
 };
 
 const CHAT_CACHE_PREFIX = 'wg-chat-cache:';
-const toStringContent = (raw: unknown): string => {
-  if (typeof raw === 'string') return raw;
-  if (raw instanceof Uint8Array) {
+
+const decodeBytes = (bytes: Uint8Array): string => {
+  if (typeof TextDecoder !== 'undefined') {
     try {
-      const decoder = typeof TextDecoder !== 'undefined' ? new TextDecoder() : null;
-      return decoder ? decoder.decode(raw) : '';
+      return new TextDecoder().decode(bytes);
     } catch {
-      return '';
+      /* ignore */
     }
   }
-  if (raw != null) return String(raw);
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    result += String.fromCharCode(bytes[i]);
+  }
+  return result;
+};
+
+const toUint8Array = (raw: unknown): Uint8Array | null => {
+  if (raw instanceof Uint8Array) return raw;
+  if (typeof ArrayBuffer !== 'undefined') {
+    if (raw instanceof ArrayBuffer) {
+      return new Uint8Array(raw);
+    }
+    if (typeof ArrayBuffer.isView === 'function' && ArrayBuffer.isView(raw as ArrayBufferView)) {
+      const view = raw as ArrayBufferView;
+      return new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+    }
+  }
+  if (raw && typeof raw === 'object') {
+    const maybe = raw as any;
+    if (maybe.type === 'Buffer' && Array.isArray(maybe.data)) {
+      try {
+        return Uint8Array.from(maybe.data as number[]);
+      } catch {
+        return null;
+      }
+    }
+    if (Array.isArray(maybe)) {
+      try {
+        return Uint8Array.from(maybe as number[]);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
+};
+
+const toStringContent = (raw: unknown): string => {
+  if (typeof raw === 'string') return raw;
+  if (raw && typeof raw === 'object') {
+    const maybe = raw as any;
+    if (typeof maybe.content === 'string') return maybe.content;
+    if (maybe.content) {
+      const nested = toUint8Array(maybe.content);
+      if (nested) return decodeBytes(nested);
+    }
+  }
+  const bytes = toUint8Array(raw);
+  if (bytes) return decodeBytes(bytes);
+  if (raw != null) {
+    return String(raw);
+  }
   return '';
 };
 type BulkModification = { fileName: string; code?: string | null | undefined };
@@ -407,6 +458,7 @@ export function SitePreview({
   const cacheIdentity = site.domain || slugName;
   const [activeFile, setActiveFile] = useState<string>('index.html');
   const [previewSrc, setPreviewSrc] = useState<string>('');
+  const previewWindowsRef = useRef(new Set<Window>());
   const [isDownloading, setIsDownloading] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const { toast } = useToast();
@@ -1036,6 +1088,40 @@ export function SitePreview({
       return '[]';
     }
   }, [site]);
+
+  const previewFilePayload = useMemo(() => {
+    const map: Record<string, string> = {};
+    Object.entries(site.files).forEach(([path, raw]) => {
+      map[path] = toStringContent(raw);
+    });
+    return map;
+  }, [site.files]);
+
+  const postPreviewState = useCallback((target: Window | null | undefined, extra?: { currentPath?: string }) => {
+    if (!target) return;
+    try {
+      const payload = {
+        type: 'wg-preview-sync' as const,
+        siteId,
+        files: previewFilePayload,
+        currentPath: extra?.currentPath ?? currentPreviewPath,
+      };
+      target.postMessage(payload, '*');
+    } catch (error) {
+      console.warn('Failed to post preview state', error);
+    }
+  }, [previewFilePayload, currentPreviewPath, siteId]);
+
+  useEffect(() => {
+    if (!previewWindowsRef.current.size) return;
+    Array.from(previewWindowsRef.current).forEach((win) => {
+      if (!win || win.closed) {
+        previewWindowsRef.current.delete(win);
+        return;
+      }
+      postPreviewState(win);
+    });
+  }, [postPreviewState]);
 
   const ensureProjectId = useCallback(async (): Promise<boolean> => {
     if (siteId && userId) return true;
@@ -2156,6 +2242,7 @@ export function SitePreview({
       const newActivePath = newTabs.length > 0 ? newTabs[newTabs.length - 1].path : 'index.html';
       setActiveEditorTab(newActivePath);
       setSelectedFileInTree(newActivePath);
+      setActiveFile(newActivePath);
     }
   };
 
@@ -2177,25 +2264,17 @@ export function SitePreview({
     debounce((siteToRender: Site, previewPath: string) => {
       const rawHtmlContent =
         siteToRender.files[previewPath] ?? siteToRender.files['index.html'];
-      const htmlContent =
-        typeof rawHtmlContent === 'string'
-          ? rawHtmlContent
-          : rawHtmlContent instanceof Uint8Array
-            ? new TextDecoder().decode(rawHtmlContent)
-            : String(rawHtmlContent || '');
+      const htmlContent = toStringContent(rawHtmlContent);
       if (!htmlContent) return;
 
       let processedHtml = htmlContent;
 
       try {
-        Object.entries(siteToRender.files).forEach(([path, content]) => {
-          if (
-            typeof content === 'string' &&
-            path !== 'index.html' &&
-            (content.startsWith('data:') ||
-              path.endsWith('.js') ||
-              path.endsWith('.css'))
-          ) {
+        Object.entries(siteToRender.files).forEach(([path, rawContent]) => {
+          if (path === 'index.html') return;
+          const content = toStringContent(rawContent);
+          if (!content) return;
+          if (content.startsWith('data:') || path.endsWith('.js') || path.endsWith('.css')) {
             const regexSafePath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
             const assetPath1 = new RegExp(`"${regexSafePath}"`, 'g');
@@ -2204,10 +2283,7 @@ export function SitePreview({
               `"assets/images/${regexSafePath.split('/').pop()}"`,
               'g'
             );
-            const assetPath4 = new RegExp(
-              `'assets/images/${regexSafePath.split('/').pop()}'`,
-              'g'
-            );
+            const assetPath4 = new RegExp(`'assets/images/${regexSafePath.split('/').pop()}'`, 'g');
 
             if (content.startsWith('data:')) {
               processedHtml = processedHtml
@@ -2222,14 +2298,8 @@ export function SitePreview({
         const scriptRegex = /<script src="scripts\/main.js"><\/script>/;
         const styleRegex = /<link rel="stylesheet" href="styles\/style.css">/;
 
-        const mainJsContent =
-          typeof siteToRender.files['scripts/main.js'] === 'string'
-            ? (siteToRender.files['scripts/main.js'] as string)
-            : '';
-        const styleCssContent =
-          typeof siteToRender.files['styles/style.css'] === 'string'
-            ? (siteToRender.files['styles/style.css'] as string)
-            : '';
+        const mainJsContent = toStringContent(siteToRender.files['scripts/main.js']);
+        const styleCssContent = toStringContent(siteToRender.files['styles/style.css']);
 
         processedHtml = processedHtml.replace(
           scriptRegex,
@@ -2626,28 +2696,40 @@ export function SitePreview({
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
+      if (!data || typeof data !== 'object') return;
+
+      if (data.type === 'wg-preview-request') {
+        const requester = event.source as Window | null;
+        if (requester && typeof requester.postMessage === 'function') {
+          previewWindowsRef.current.add(requester);
+          postPreviewState(requester, { currentPath: currentPreviewPath });
+        }
+        return;
+      }
+
       const sourceWindow = iframeRef.current?.contentWindow;
       if (event.source !== sourceWindow) return;
-      if (event.data?.type === 'open-path') {
-        const path = event.data.path;
+      if (data.type === 'open-path') {
+        const path = data.path;
         if (site.files[path]) {
           setCurrentPreviewPath(path);
         }
       }
-      if (event.data?.type === 'edit-element') {
+      if (data.type === 'edit-element') {
         setInspectorEnabled(false);
         const targetPath = currentPreviewPath || 'index.html';
         setElementTarget({
           fileName: targetPath,
-          elementHtml: event.data.outerHTML || '',
-          tagName: event.data.tagName || null,
-          elementId: event.data.id || null,
-          path: event.data.path || null,
+          elementHtml: data.outerHTML || '',
+          tagName: data.tagName || null,
+          elementId: data.id || null,
+          path: data.path || null,
         });
         setElementPrompt('');
         setElementDialogOpen(true);
       }
-      if (event.data?.type === 'close-edit-element') {
+      if (data.type === 'close-edit-element') {
         setElementTarget(null);
         setElementDialogOpen(false);
         setElementPrompt('');
@@ -2752,16 +2834,16 @@ export function SitePreview({
         rules: [],
         colors: {
           // White sliders over dark track (consistent across app)
-          'scrollbarSlider.background': '#ffffffbb',
-          'scrollbarSlider.hoverBackground': '#ffffffff',
-          'scrollbarSlider.activeBackground': '#ffffffff',
-          // Make selection visible, as it's not by default in vs-dark when customized
-          'editor.selectionBackground': '#264f78',
-          'editor.selectionHighlightBackground': '#add6ff26',
+          'scrollbarSlider.background': '#cdd5ff88',
+          'scrollbarSlider.hoverBackground': '#cdd5ffcc',
+          'scrollbarSlider.activeBackground': '#cdd5ffff',
+          // Make selection highly visible, close to VS Code defaults
+          'editor.selectionBackground': '#345fe8b8',
+          'editor.selectionHighlightBackground': '#4f6ee533',
           'editor.selectionForeground': '#ffffff',
-          'editor.selectionHighlightBorder': '#5c7db833',
-          'editor.lineHighlightBackground': '#2a2f3d66',
-          'editorCursor.foreground': '#a9d7ff',
+          'editor.selectionHighlightBorder': '#6b83ff66',
+          'editor.lineHighlightBackground': '#262c3d80',
+          'editorCursor.foreground': '#b7d7ff',
         },
       });
       monaco.editor.setTheme('webgenius-dark');
@@ -3258,7 +3340,14 @@ export function SitePreview({
             size="icon"
             title="Open in new tab"
             className="h-9 w-9 rounded-xl bg-[#2f3136] text-white/80 hover:text-white hover:bg-[#3b3d42] shadow-sm disabled:opacity-40"
-            onClick={() => { if (siteId) window.open(`/preview/${siteId}`, '_blank'); }}
+            onClick={() => {
+              if (!siteId) return;
+              const win = window.open(`/preview/${siteId}`, '_blank');
+              if (win) {
+                previewWindowsRef.current.add(win);
+                setTimeout(() => postPreviewState(win), 120);
+              }
+            }}
             disabled={!siteId}
           >
             <ExternalLink className="h-4 w-4" />
@@ -3437,92 +3526,102 @@ export function SitePreview({
                 className="flex-1 flex flex-col overflow-hidden h-full"
               >
 
-            <TabsContent
-              value="code"
-              className="flex-1 overflow-hidden mt-0 bg-transparent"
-            >
-              {/* Editor Tabs */}
-              <div className="flex overflow-x-auto border-b border-[#333333] bg-[#252526]">
-                {openTabs.map((tab) => (
-                  <div
-                    key={tab.path}
-                    className={`flex items-center gap-2 px-4 py-2 cursor-pointer border-r border-[#333333] ${
-                      activeEditorTab === tab.path
-                        ? 'bg-[#1e1e1e] border-b-2 border-b-accent'
-                        : 'bg-[#252526]'
-                    }`}
-                    onClick={() => {
-                      setActiveEditorTab(tab.path);
-                      setSelectedFileInTree(tab.path);
-                    }}
-                  >
-                    {fileIcon(tab.path.split('/').pop() || '')}
-                    <span className="text-sm text-[#cccccc]">
-                      {tab.path.split('/').pop()}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-4 w-4 ml-2 text-[#c5c5c5] hover:text-white"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        closeTab(tab.path);
+            <TabsContent value="code" className="flex-1 overflow-hidden mt-0">
+              <div className="flex h-full min-h-0 flex-col bg-transparent">
+                {/* Editor Tabs */}
+                <div className="flex overflow-x-auto border-b border-[#333333] bg-[#252526]">
+                  {openTabs.map((tab) => (
+                    <div
+                      key={tab.path}
+                      className={`flex items-center gap-2 px-4 py-2 cursor-pointer border-r border-[#333333] ${
+                        activeEditorTab === tab.path
+                          ? 'bg-[#1e1e1e] border-b-2 border-b-accent'
+                          : 'bg-[#252526]'
+                      }`}
+                      onClick={() => {
+                        setActiveEditorTab(tab.path);
+                        setSelectedFileInTree(tab.path);
+                        setActiveFile(tab.path);
                       }}
                     >
-                      <X className="h-3 w-3" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-
-                  {activeEditorTab && (
-                    <>
-                  {activeEditorTab.match(/\.(png|jpe?g|gif|svg|webp|avif|ico)$/i) ? (
-                    <div className="p-4 flex items-center justify-center h-full bg-transparent">
-                      <img
-                        src={site.files[activeEditorTab] as string}
-                        alt={activeEditorTab}
-                        className="max-w-full max-h-full object-contain"
-                      />
+                      {fileIcon(tab.path.split('/').pop() || '')}
+                      <span className="text-sm text-[#cccccc]">
+                        {tab.path.split('/').pop()}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-4 w-4 ml-2 text-[#c5c5c5] hover:text-white"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          closeTab(tab.path);
+                        }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
+                  ))}
+                </div>
+
+                <div className="relative flex-1 min-h-0 bg-[#1e1e1e]">
+                  {activeEditorTab ? (
+                    /\.(png|jpe?g|gif|svg|webp|avif|ico)$/i.test(activeEditorTab) ? (
+                      <div className="flex h-full items-center justify-center p-4">
+                        <img
+                          src={toStringContent(site.files[activeEditorTab])}
+                          alt={activeEditorTab}
+                          className="max-h-full max-w-full object-contain"
+                        />
+                      </div>
+                    ) : (
+                      <Editor
+                        height="100%"
+                        path={activeEditorTab}
+                        defaultLanguage={getLanguage(activeEditorTab)}
+                        value={toStringContent(site.files[activeEditorTab]) || ''}
+                        onChange={(value) => handleEditorChange(value, activeEditorTab)}
+                        theme="webgenius-dark"
+                        onMount={handleEditorMount}
+                        options={{
+                          fontSize: 14,
+                          minimap: { enabled: false },
+                          automaticLayout: true,
+                          smoothScrolling: true,
+                          cursorBlinking: 'phase',
+                          cursorSmoothCaretAnimation: true,
+                          mouseWheelScrollSensitivity: 1.4,
+                          fastScrollSensitivity: 4,
+                          scrollBeyondLastColumn: 6,
+                          selectionHighlight: true,
+                          roundedSelection: true,
+                          renderLineHighlight: 'all',
+                          renderWhitespace: 'selection',
+                          mouseWheelZoom: false,
+                          dragAndDrop: true,
+                          wordWrap: 'off',
+                          multiCursorModifier: 'alt',
+                          scrollbar: {
+                            vertical: 'visible',
+                            horizontal: 'visible',
+                            useShadows: false,
+                            verticalScrollbarSize: 12,
+                            horizontalScrollbarSize: 12,
+                            handleMouseWheel: true,
+                            horizontalHasArrows: true,
+                            verticalHasArrows: false,
+                            arrowSize: 12,
+                          },
+                        }}
+                      />
+                    )
                   ) : (
-                    <Editor
-                      height="100%"
-                      path={activeEditorTab}
-                      defaultLanguage={getLanguage(activeEditorTab)}
-                      value={site.files[activeEditorTab] as string || ''}
-                      onChange={(value) => handleEditorChange(value, activeEditorTab)}
-                      theme="vs-dark"
-                      onMount={handleEditorMount}
-                      options={{
-                        fontSize: 14,
-                        minimap: { enabled: false },
-                        automaticLayout: true,
-                        smoothScrolling: true,
-                        cursorBlinking: 'smooth',
-                        cursorSmoothCaretAnimation: true,
-                        mouseWheelScrollSensitivity: 1.1,
-                        fastScrollSensitivity: 5,
-                        scrollBeyondLastColumn: 6,
-                        selectionHighlight: true,
-                        roundedSelection: false,
-                        renderLineHighlight: 'all',
-                        mouseWheelZoom: false,
-                        dragAndDrop: true,
-                        scrollbar: {
-                          vertical: 'auto',
-                          horizontal: 'auto',
-                          useShadows: false,
-                          verticalScrollbarSize: 4,
-                          horizontalScrollbarSize: 4,
-                          handleMouseWheel: true,
-                          arrowSize: 8,
-                        },
-                      }}
-                    />
+                    <div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-[#a6accd]">
+                      <FileCode className="h-10 w-10 text-[#636b90]" />
+                      <p>Select a file from the tree to start editing.</p>
+                    </div>
                   )}
-                </>
-              )}
+                </div>
+              </div>
             </TabsContent>
 
             <TabsContent value="preview" className="flex-1 overflow-hidden mt-0">
