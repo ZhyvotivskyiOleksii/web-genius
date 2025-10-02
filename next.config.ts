@@ -45,12 +45,14 @@ const nextConfig: NextConfig = {
   },
   outputFileTracingIncludes: {
     'src/app/actions.ts': [
-      './public/games/**',
-      './public/images/**',
+      './public/games/**/*',
+      './public/images/img-casino/**/*',
+      './public/images/favicon/**/*',
     ],
     'src/lib/generation.ts': [
-      './public/games/**',
-      './public/images/**',
+      './public/games/**/*',
+      './public/images/img-casino/**/*',
+      './public/images/favicon/**/*',
     ],
   },
 };
