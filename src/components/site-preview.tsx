@@ -206,6 +206,22 @@ const toStringContent = (raw: unknown): string => {
   }
   return '';
 };
+
+const splitPreviewTarget = (raw?: string | null): { file: string; hash: string } => {
+  if (typeof raw !== 'string') {
+    return { file: 'index.html', hash: '' };
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { file: 'index.html', hash: '' };
+  }
+  const [pathPart, hashPart] = trimmed.split('#', 2);
+  const [filePart] = pathPart.split('?', 1);
+  const normalized = filePart.replace(/^\.?\/+/, '').trim();
+  const file = normalized.length ? normalized : 'index.html';
+  const hash = hashPart ? `#${hashPart}` : '';
+  return { file, hash };
+};
 type BulkModification = { fileName: string; code?: string | null | undefined };
 
 
@@ -2262,8 +2278,9 @@ export function SitePreview({
   // --- PREVIEW GENERATION ---
   const updatePreviewDebounced = useCallback(
     debounce((siteToRender: Site, previewPath: string) => {
+      const { file: previewFile, hash: previewHash } = splitPreviewTarget(previewPath);
       const rawHtmlContent =
-        siteToRender.files[previewPath] ?? siteToRender.files['index.html'];
+        siteToRender.files[previewFile] ?? siteToRender.files['index.html'];
       const htmlContent = toStringContent(rawHtmlContent);
       if (!htmlContent) return;
 
@@ -2311,33 +2328,51 @@ export function SitePreview({
         );
 
         // Router for iframe
-        const internalPaths = Object.keys(siteToRender.files).filter((p) =>
-          p.endsWith('.html')
+        const internalPathSet = new Set(
+          Object.keys(siteToRender.files)
+            .filter((p) => p.endsWith('.html'))
+            .map((p) => p.replace(/^\.?\/+/, ''))
         );
-        internalPaths.forEach((p) => {
-          const fileName = p.replace(/^\/?/, '');
-          const esc = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const patterns = [
-            new RegExp(`href=\"${esc}\"`, 'g'),
-            new RegExp(`href=\'${esc}\'`, 'g'),
-            new RegExp(`href=\"\./${esc}\"`, 'g'),
-            new RegExp(`href=\'\./${esc}\'`, 'g'),
-            new RegExp(`href=\"/${esc}\"`, 'g'),
-            new RegExp(`href=\'/${esc}\'`, 'g'),
-          ];
-          patterns.forEach((rx) => {
-            processedHtml = processedHtml.replace(
-              rx,
-              `href="#" data-preview-path="${fileName}"`
-            );
-          });
-        });
+
+        const convertInternalLink = (
+          match: string,
+          href: string,
+          hash: string | undefined
+        ) => {
+          const normalizedHref = href.replace(/^\.?\/+/, '');
+          if (!internalPathSet.has(normalizedHref)) {
+            return match;
+          }
+          const fragment = hash ?? '';
+          const composed = `${normalizedHref}${fragment}`;
+          return `href="#" data-preview-path="${composed}"`;
+        };
+
+        processedHtml = processedHtml
+          .replace(
+            /href=\"([^\"#?]+\.html)(#[^\"]*)?\"/g,
+            (match, href, hash = '') => convertInternalLink(match, href, hash)
+          )
+          .replace(
+            /href='([^'#?]+\.html)(#[^']*)?'/g,
+            (match, href, hash = '') => convertInternalLink(match, href, hash)
+          );
       } catch (error) {
         console.error('Preview assembly failed, falling back to raw HTML', error);
         processedHtml = htmlContent;
       }
 
       const routerScript = `\n<script>(function(){document.addEventListener('click',function(e){var a=e.target&&(e.target.closest?e.target.closest('a[data-preview-path]'):null);if(!a)return;e.preventDefault();var p=a.getAttribute('data-preview-path');if(p&&window.parent){window.parent.postMessage({type:'open-path',path:p},'*');}},true);})();<\/script>`;
+      const extraScripts: string[] = [routerScript];
+      if (previewHash) {
+        const safeHash = previewHash
+          .replace(/\\/g, '\\\\')
+          .replace(/'/g, "\\'")
+          .replace(/`/g, '\\`')
+          .replace(/<\/script>/gi, '<\\/script>');
+        const hashScript = `\n<script>(function(){try{var hash='${safeHash}';if(hash&&hash.length>1){if(hash.charAt(0)==='#'){hash=hash.slice(1);}if(hash){location.hash=hash;}}}catch(err){}})();<\/script>`;
+        extraScripts.push(hashScript);
+      }
 
       const inspectorScript = `
 <script>
@@ -2660,13 +2695,14 @@ export function SitePreview({
 })();
 <\/script>`;
       try {
+        const scriptBundle = `${extraScripts.join('')}${inspectorScript}`;
         if (/<\/body>/i.test(processedHtml)) {
           processedHtml = processedHtml.replace(
             /<\/body>/i,
-            routerScript + inspectorScript + '</body>'
+            scriptBundle + '</body>'
           );
         } else {
-          processedHtml = `${processedHtml}${routerScript}${inspectorScript}`;
+          processedHtml = `${processedHtml}${scriptBundle}`;
         }
       } catch (error) {
         console.error('Failed to inject inspector script', error);
@@ -2711,14 +2747,22 @@ export function SitePreview({
       const sourceWindow = iframeRef.current?.contentWindow;
       if (event.source !== sourceWindow) return;
       if (data.type === 'open-path') {
-        const path = data.path;
-        if (site.files[path]) {
-          setCurrentPreviewPath(path);
+        const rawPath = typeof data.path === 'string' ? data.path : '';
+        const extraHash = typeof data.hash === 'string' ? data.hash : '';
+        const base = splitPreviewTarget(rawPath);
+        const hashCandidate = extraHash
+          ? extraHash.startsWith('#')
+            ? extraHash
+            : `#${extraHash.replace(/^#/, '')}`
+          : base.hash;
+        const nextPath = hashCandidate ? `${base.file}${hashCandidate}` : base.file;
+        if (site.files[base.file]) {
+          setCurrentPreviewPath(nextPath);
         }
       }
       if (data.type === 'edit-element') {
         setInspectorEnabled(false);
-        const targetPath = currentPreviewPath || 'index.html';
+        const targetPath = splitPreviewTarget(currentPreviewPath).file || 'index.html';
         setElementTarget({
           fileName: targetPath,
           elementHtml: data.outerHTML || '',
@@ -3588,7 +3632,7 @@ export function SitePreview({
                           automaticLayout: true,
                           smoothScrolling: true,
                           cursorBlinking: 'phase',
-                          cursorSmoothCaretAnimation: true,
+                          cursorSmoothCaretAnimation: 'on',
                           mouseWheelScrollSensitivity: 1.4,
                           fastScrollSensitivity: 4,
                           scrollBeyondLastColumn: 6,

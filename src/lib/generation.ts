@@ -95,8 +95,44 @@ const SECTION_ACCENTS = [
   'section-accent-lens',
 ];
 
+type SectionShape = 'flat' | 'soft' | 'sleek' | 'angular';
+
+const SECTION_SHAPES: SectionShape[] = ['flat', 'soft', 'sleek', 'angular'];
+
+const SECTION_SHAPE_CLASS_MAP: Record<SectionShape, string> = {
+  flat: 'shape-flat',
+  soft: 'shape-soft',
+  sleek: 'shape-sleek',
+  angular: 'shape-angular',
+};
+
+const SECTION_SHAPE_HINTS: Array<{ pattern: RegExp; shapes: SectionShape[] }> = [
+  { pattern: /(hero|headline|banner|welcome|intro|experience)/i, shapes: ['sleek', 'soft'] },
+  { pattern: /(cta|call-to-action|join|signup|ready)/i, shapes: ['sleek', 'angular'] },
+  { pattern: /(stats|metrics|dashboard|timeline|pricing|table|faq|roadmap)/i, shapes: ['angular', 'sleek'] },
+  { pattern: /(features|cards|gallery|about|story|benefit)/i, shapes: ['soft', 'sleek', 'flat'] },
+  { pattern: /(contact|support|legal|policy|terms)/i, shapes: ['flat', 'angular'] },
+];
+
+const resolveExistingPath = (...segments: string[]): string => {
+  const attempts: string[] = [];
+
+  const cwd = process.cwd();
+  attempts.push(path.join(cwd, ...segments));
+  attempts.push(path.join(cwd, '..', ...segments));
+  attempts.push(path.join(cwd, '..', '..', ...segments));
+  attempts.push(path.join(cwd, '.next', 'standalone', ...segments));
+
+  for (const candidate of attempts) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return attempts[0];
+};
+
 async function listImageFiles(relativeDir: string): Promise<string[]> {
-  const baseDir = path.join(process.cwd(), 'public', relativeDir);
+  const baseDir = resolveExistingPath('public', relativeDir);
   try {
     const entries = await fs.promises.readdir(baseDir, { withFileTypes: true });
     return entries
@@ -111,7 +147,7 @@ async function pickImageAsset(relativeDir: string): Promise<{ webPath: string; b
   const files = await listImageFiles(relativeDir);
   if (!files.length) return null;
   const webPath = files[Math.floor(Math.random() * files.length)];
-  const absolute = path.join(process.cwd(), 'public', webPath);
+  const absolute = resolveExistingPath('public', webPath);
   try {
     const buffer = await fs.promises.readFile(absolute);
     return { webPath, buffer };
@@ -369,6 +405,44 @@ function getLocalizedSectionTemplates(language: string, siteName: string) {
   return buildSectionTemplates(englishSectionLibrary, siteName);
 }
 
+function shouldInjectDisclaimer(prompt: string): boolean {
+  if (!prompt) return false;
+  const normalized = prompt.toLowerCase();
+  return /18\s*\+|дискл|ответственн|відповідальн|responsible|disclaimer|responsyw|bezpieczeństw/.test(normalized);
+}
+
+function isDisclaimerSection(section: { type?: string; title?: string; details?: string }): boolean {
+  const type = (section.type || '').toLowerCase();
+  if (type.includes('disclaimer') || type.includes('responsible') || type.includes('compliance')) {
+    return true;
+  }
+  const haystack = `${section.title || ''} ${section.details || ''}`.toLowerCase();
+  return /18\s*\+|disclaimer|responsible|безопас|відповідальн|ostrzeż|uwaga/.test(haystack);
+}
+
+function createDisclaimerSection(language: string): { type: string; title: string; details: string } {
+  switch (language) {
+    case 'Polish':
+      return {
+        type: 'disclaimer',
+        title: 'Informacja o Bezpiecznej Grze 18+',
+        details: 'Dodaj wyraźną odznakę 18+ przed tekstem i podkreśl, że to darmowa, społecznościowa zabawa bez prawdziwych pieniędzy.',
+      };
+    case 'Ukrainian':
+      return {
+        type: 'disclaimer',
+        title: 'Відповідальна гра 18+',
+        details: 'Розмісти помітний бейдж 18+ перед повідомленням і наголоси, що це соціальний демо-досвід без реальних ставок.',
+      };
+    default:
+      return {
+        type: 'disclaimer',
+        title: 'Responsible Play Notice 18+',
+        details: 'Place a prominent 18+ badge ahead of the copy and stress that this is a social demo with zero real-money wagering.',
+      };
+  }
+}
+
 function shuffleArray<T>(items: T[]): T[] {
   const clone = [...items];
   for (let i = clone.length - 1; i > 0; i--) {
@@ -379,38 +453,35 @@ function shuffleArray<T>(items: T[]): T[] {
 }
 
 function createStyleHintPool(themeMode: 'light' | 'dark', isGameSite: boolean): string[] {
-  const shared = [
-    'Layer rich parallax background images with subtle depth and add floating chips moving at different speeds',
-    'Use organic gradients and animated radial glows behind the content blocks with CSS motion blur',
-    'Compose a split layout with diagonal glass panels, soft drop shadows and animated SVG sparkles',
-    'Overlay a faint grid of neon lines and animated particles drifting upward to simulate casino lights',
-    'Apply blurred spotlight beams in the background and add rotating geometric accents on the corners',
-    'Mix horizontal scroll galleries, pinned testimonials, and asymmetrical columns so each section feels different',
+  const minimalShared = [
+    'Keep the background clean and neutral (#f4f6ff or rgba(15,23,42,0.85) depending on theme) with a single 1px border and soft outer shadow',
+    'Use balanced two-column layouts with generous padding, even grid spacing, and accent badges limited to indigo/sky shades from the palette',
+    'Highlight sections with a delicate 1px top border or slim divider instead of gradients; reserve bold colour for CTAs and icons only',
+    'Integrate a low-opacity 12px grid or dotted overlay (5–8% opacity) to add depth without introducing new colours',
+    'Add very soft corner light spots (blur radius 120px) in the accent colour while keeping the main surface neutral and readable',
   ];
 
   const darkOnly = [
-    'Create a midnight neon atmosphere with deep purple gradients, glowing borders and animated dust',
-    'Blend a cosmic starfield with slow-moving light streaks and reflective card surfaces',
-    'Add glossy glassmorphism cards hovering above a smoky background with shimmering edges',
-    'Build a layered starfield with twinkling points, soft nebula clouds, and constellation lines drawn with CSS keyframes',
+    'Rely on deep navy surfaces (#0b1224) with soft glass cards (backdrop-blur, 1px borders) and electric blue highlights',
+    'Stack muted charcoal panels separated by thin cyan dividers and keep typography bright white for contrast',
+    'Add oversized playing-card suits as 4–6% opacity watermarks in the corner, avoiding neon glows or heavy gradients',
   ];
 
   const lightOnly = [
-    'Use soft peach-to-gold gradients with translucent frosted panels and gentle shadow play',
-    'Incorporate watercolor textures with bright highlights and floating translucent bubbles',
-    'Design a sunlit lounge vibe with warm gradients, subtle noise textures and animated confetti lines',
-    'Craft a paper collage aesthetic with torn-edge cards, shadowed scraps, and hand-drawn doodle icons',
+    'Adopt a crisp white or very light slate background with floating cards, subtle 1px borders, and a single electric-blue accent colour',
+    'Introduce a faint diagonal highlight (under 6% opacity) using the primary colour, then keep all text dark slate for legibility',
+    'Use light grey panel dividers, tight typography rhythm, and reserve accent colour exclusively for CTA buttons and icon badges',
   ];
 
   const gameExtras = [
-    'Center a rotating 3D slot wheel silhouette with glowing reels in the background and layered chips',
-    'Feature animated jackpot burst lines behind CTA buttons with shimmering coin trails',
-    'Stack cascading card suits using CSS masks and animate them with slow parallax on scroll',
-    'Introduce interactive parallax cards that tilt with pointer movement and catch light with CSS gradients',
+    'Add a subtle halo glow behind hero imagery using the brand accent colour while keeping the surface minimal',
+    'Use icon badges shaped like chips or dice with soft shadows and avoid additional neon backgrounds',
+    'Integrate a horizontal timeline or stat row with evenly spaced cards, each using a single accent stroke',
+    'Apply gentle parallax on feature cards with transform hover states, but keep background neutral and text crisp',
   ];
 
   const pool = [
-    ...shared,
+    ...minimalShared,
     ...(themeMode === 'dark' ? darkOnly : lightOnly),
     ...(isGameSite ? gameExtras : []),
   ];
@@ -433,6 +504,43 @@ function sanitizeSectionHtml(html: string): string {
   for (const pattern of patterns) {
     clean = clean.replace(pattern, '');
   }
+  clean = clean.replace(/\sstyle="[^"]*"/gi, '');
+  const disallowedPrefixes = ['bg-gradient', 'from-', 'via-', 'to-', 'mix-blend-', 'shadow-inner', 'shadow-[', 'drop-shadow'];
+  const disallowedContains = ['opacity-', 'text-transparent'];
+  clean = clean.replace(/class="([^"]*)"/gi, (match, classValue) => {
+    const tokens = classValue
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter(Boolean);
+    const filtered = tokens.filter((token) => {
+      const lower = token.toLowerCase();
+      if (lower.startsWith('btn-')) return true;
+      if (disallowedPrefixes.some((prefix) => lower.startsWith(prefix))) return false;
+      if (disallowedContains.some((snippet) => lower.includes(snippet))) return false;
+      return true;
+    });
+    if (!filtered.length) {
+      return '';
+    }
+    return `class="${filtered.join(' ')}"`;
+  });
+  clean = clean.replace(/class="([^"]*btn-(?:primary|secondary)[^"]*)"/gi, (_, classValue) => {
+    const parts = classValue
+      .split(/\s+/)
+      .filter(Boolean)
+      .filter((token: string) => {
+        const lower = token.toLowerCase();
+        if (lower === 'btn-primary' || lower === 'btn-secondary') return true;
+        if (lower.startsWith('btn-')) return true;
+        if (lower.startsWith('bg-') || lower.startsWith('from-') || lower.startsWith('to-') || lower.startsWith('via-') || lower.startsWith('shadow-')) return false;
+        if (lower.startsWith('rounded')) return false;
+        return true;
+      });
+    if (classValue.includes('btn-primary') && !parts.includes('btn-primary')) parts.push('btn-primary');
+    if (classValue.includes('btn-secondary') && !parts.includes('btn-secondary')) parts.push('btn-secondary');
+    const unique = Array.from(new Set(parts));
+    return `class="${unique.join(' ')}"`;
+  });
   return clean.trim();
 }
 
@@ -523,6 +631,115 @@ type AssetManifest = {
 
 const assets = manifest as AssetManifest;
 
+const createLocalizedHeroSection = (language: string, siteName: string) => {
+  switch (language) {
+    case 'Polish':
+      return {
+        type: 'hero',
+        title: `Witamy w ${siteName}`,
+        details: 'Stwórz przyjazny bohater sekcji z krótkim opisem społecznościowego kasyna i darmowymi turniejami.',
+      };
+    case 'Ukrainian':
+      return {
+        type: 'hero',
+        title: `Ласкаво просимо до ${siteName}`,
+        details: 'Опиши соціальне казино, безкоштовні турніри й щоденні бонуси, зосередь акцент на розвазі без ризику.',
+      };
+    default:
+      return {
+        type: 'hero',
+        title: `Welcome to ${siteName}`,
+        details: 'Craft a welcoming hero section that spotlights the social casino vibe, free tournaments, and nightly rewards.',
+      };
+  }
+};
+
+function createFallbackStructure(siteName: string, language: string, prompt: string): FlowResult<SiteStructure> {
+  const library = getLocalizedSectionTemplates(language, siteName);
+  const uniqueByType = new Map<string, { type: string; title: string; details?: string }>();
+  library.forEach((section) => {
+    const key = (section.type || '').toLowerCase();
+    if (!uniqueByType.has(key)) {
+      uniqueByType.set(key, section);
+    }
+  });
+  let sections = Array.from(uniqueByType.values());
+  if (!sections.length) {
+    sections = [
+      createLocalizedHeroSection(language, siteName),
+      {
+        type: 'features',
+        title: language === 'Polish'
+          ? `Dlaczego gracze wybierają ${siteName}`
+          : language === 'Ukrainian'
+            ? `Чому обирають ${siteName}`
+            : `Why Players Choose ${siteName}`,
+        details: language === 'Polish'
+          ? 'Wypunktuj 3 atuty: codzienna pula monet, wydarzenia społecznościowe i brak prawdziwych stawek.'
+          : language === 'Ukrainian'
+            ? 'Підкресли 3 переваги: щоденні бонуси, спільнотні івенти та відсутність ставок.'
+            : 'Highlight three perks: daily bonus drops, community challenges, and zero real-money wagering.',
+      },
+      {
+        type: 'cta',
+        title: language === 'Polish'
+          ? 'Gotowy do gry?'
+          : language === 'Ukrainian'
+            ? 'Готові розпочати?'
+            : 'Ready to Play?',
+        details: language === 'Polish'
+          ? 'Zaproś użytkownika do darmowej rejestracji i eksploracji lobby gier.'
+          : language === 'Ukrainian'
+            ? 'Запроси користувача створити безкоштовний акаунт і перейти до ігор.'
+            : 'Invite visitors to create a free profile and explore the featured games lobby.',
+      },
+    ];
+  }
+
+  const heroIndex = sections.findIndex((section) => (section.type || '').toLowerCase() === 'hero');
+  if (heroIndex === -1) {
+    sections.unshift(createLocalizedHeroSection(language, siteName));
+  } else if (heroIndex > 0) {
+    const [heroSection] = sections.splice(heroIndex, 1);
+    sections.unshift(heroSection);
+  }
+
+  const explicitCount = extractRequestedSectionCount(prompt);
+  const targetCount = explicitCount != null
+    ? Math.max(1, Math.min(explicitCount, 8))
+    : Math.min(4, Math.max(3, sections.length));
+
+  if (sections.length < targetCount) {
+    const pool = library.length ? library : sections;
+    let cursor = 0;
+    while (sections.length < targetCount && pool.length) {
+      const candidate = pool[cursor % pool.length];
+      const key = (candidate.type || '').toLowerCase();
+      const exists = sections.some((section) => (section.type || '').toLowerCase() === key);
+      if (!exists || candidate.type === 'cta') {
+        sections.push({
+          type: candidate.type,
+          title: candidate.title,
+          details: candidate.details,
+        });
+      }
+      cursor += 1;
+      if (cursor > pool.length * 2) break;
+    }
+  }
+
+  if (sections.length > targetCount) {
+    sections = sections.slice(0, targetCount);
+  }
+
+  return {
+    theme: { primaryColor: 'indigo-500', font: 'Inter' },
+    sections,
+    usage: { inputTokens: 0, outputTokens: 0 },
+    model: 'fallback-template',
+  };
+}
+
 function extractRequestedSectionCount(input: string): number | null {
   if (!input) return null;
   const normalized = input.toLowerCase();
@@ -588,7 +805,8 @@ function detectPreferredThemeMode(prompt: string): 'light' | 'dark' | undefined 
   const lightHints = [
     'light theme', 'light mode', 'bright', 'clean white', 'pastel', 'minimal light',
     'sunny', 'airy', 'fresh', 'soft colors', 'white background', 'daylight',
-    'светлая тема', 'светлый стиль', 'светлый фон', 'светлая цветовая схема',
+    'white theme', 'white layout',
+    'светлая тема', 'светлый стиль', 'светлый фон', 'светлая цветовая схема', 'белая тема', 'белый фон',
     'білий фон', 'світла тема', 'світлий стиль'
   ];
   const darkHints = [
@@ -599,7 +817,77 @@ function detectPreferredThemeMode(prompt: string): 'light' | 'dark' | undefined 
   ];
   if (lightHints.some((token) => text.includes(token))) return 'light';
   if (darkHints.some((token) => text.includes(token))) return 'dark';
+  const lightRegexes = [
+    /\bсве[тд]?\w*\s+(?:тема|стиль|фон|палитр|схема|цвет)/,
+    /\blig?ht\s+(?:theme|mode|palette|scheme)\b/,
+  ];
+  if (lightRegexes.some((rx) => rx.test(text))) return 'light';
+  const darkRegexes = [
+    /\bтемн\w*\s+(?:тема|стиль|фон|палитр|схема|цвет)/,
+  ];
+  if (darkRegexes.some((rx) => rx.test(text))) return 'dark';
   return undefined;
+}
+
+function detectSectionShape(prompt: string, preferredMode?: 'light' | 'dark'): SectionShape {
+  const text = (prompt || '').toLowerCase();
+  if (/\b(flat|minimalist|clean|corporate|business|grid|modern minimal)\b/.test(text)) {
+    return 'flat';
+  }
+  if (/\b(brutalist|angular|square|sharp|edgy|techno|rectangular)\b/.test(text)) {
+    return 'angular';
+  }
+  if (/\b(rounded|pill|soft edges|soft|organic|flowing|curved|fluid)\b/.test(text)) {
+    return 'soft';
+  }
+  if (/\b(sleek|elegant|premium|lux|luxury|neon|futuristic|hi-tech)\b/.test(text)) {
+    return 'sleek';
+  }
+  if (preferredMode === 'dark') {
+    return Math.random() < 0.6 ? 'sleek' : 'flat';
+  }
+  if (preferredMode === 'light') {
+    return Math.random() < 0.65 ? 'flat' : 'soft';
+  }
+  return 'flat';
+}
+
+function pickSectionShape(section: { type?: string; title?: string }, baseShape: SectionShape, index: number): SectionShape {
+  const text = `${section.type || ''} ${section.title || ''}`.toLowerCase();
+  const candidates = new Set<SectionShape>([baseShape]);
+
+  SECTION_SHAPE_HINTS.forEach((hint) => {
+    if (hint.pattern.test(text)) {
+      hint.shapes.forEach((shape) => candidates.add(shape));
+    }
+  });
+
+  // Always allow flat as a safe fallback.
+  candidates.add('flat');
+
+  let alternatives = Array.from(candidates).filter((shape) => shape !== baseShape);
+  if (!alternatives.length) {
+    if (baseShape === 'flat') {
+      alternatives = ['sleek', 'soft'];
+    } else {
+      alternatives = ['flat'];
+    }
+  }
+
+  const heroOrCta = /(hero|cta|call-to-action|banner|ready|join|signup)/.test(text);
+  const structural = /(stats|metrics|timeline|roadmap|pricing|table|faq|grid)/.test(text);
+  const varietyChance = heroOrCta ? 0.55 : structural ? 0.45 : 0.3;
+  const indexBias = ((index + 1) % 4 === 0);
+
+  if (alternatives.length && (indexBias || Math.random() < varietyChance)) {
+    return alternatives[Math.floor(Math.random() * alternatives.length)];
+  }
+
+  if (baseShape !== 'flat' && Math.random() < 0.2) {
+    return 'flat';
+  }
+
+  return baseShape;
 }
 
 function parseLayoutPreferences(prompt: string): { includeHeader: boolean; includeFooter: boolean } {
@@ -620,12 +908,16 @@ function parseLayoutPreferences(prompt: string): { includeHeader: boolean; inclu
 export async function generateSingleSite(prompt: string, siteName: string, websiteTypes: string[] = [], history: string[] = []): Promise<Site | null> {
   try {
     const startedAt = Date.now();
-    const isGameSite = websiteTypes.includes('Game');
+    const isGameSite = websiteTypes.some((type) => type.toLowerCase().includes('game'));
     const isSportSite = websiteTypes.some((type) => type.toLowerCase().includes('sport'));
-    const publicDir = path.join(process.cwd(), 'public');
-    const sourceGamesDir = path.join(publicDir, 'games');
+    const publicDir = resolveExistingPath('public');
+    const sourceGamesDir = resolveExistingPath('public', 'games');
     const { name: languageName } = resolveLanguage(prompt, websiteTypes);
     const preferredMode = detectPreferredThemeMode(prompt);
+    let baseSectionShape = detectSectionShape(prompt, preferredMode);
+    if (isGameSite) {
+      baseSectionShape = 'angular';
+    }
     const layoutPrefs = parseLayoutPreferences(prompt);
     const brandTheme = chooseBrandingTheme({ websiteTypes, preferredMode });
     const brandVisual = inferBrandVisual(websiteTypes, prompt);
@@ -680,40 +972,93 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
 
     // --- Step 2: AI Content Generation ---
     console.log('Step 2.1: Getting site structure...');
-    const structureResult: FlowResult<SiteStructure> = await generateSiteStructure({ prompt, language: languageName });
+    let structureResult: FlowResult<SiteStructure>;
+    try {
+      structureResult = await generateSiteStructure({ prompt, language: languageName });
+    } catch (error) {
+      console.error('generateSiteStructure failed, using deterministic fallback plan.', error);
+      structureResult = createFallbackStructure(siteName, languageName, prompt);
+    }
     const structure = structureResult;
     if (!structure || !structure.sections || structure.sections.length === 0) {
-      throw new Error('The AI architect failed to create a site plan.');
+      console.warn('Site structure empty after fallback; injecting minimal template.');
+      structure.sections = createFallbackStructure(siteName, languageName, prompt).sections;
     }
+    let sectionPlan = Array.isArray(structure.sections) ? [...structure.sections] : [];
     const desiredSections = getLocalizedSectionTemplates(languageName, siteName);
     const explicitSectionCount = extractRequestedSectionCount(prompt);
+    const wantsDisclaimerSection = shouldInjectDisclaimer(prompt);
+
+    if (wantsDisclaimerSection && !sectionPlan.some(isDisclaimerSection)) {
+      sectionPlan.push(createDisclaimerSection(languageName));
+    }
+
     if (explicitSectionCount != null) {
-      if (structure.sections.length > explicitSectionCount) {
-        structure.sections = structure.sections.slice(0, explicitSectionCount);
+      if (sectionPlan.length > explicitSectionCount) {
+        const trimmed = sectionPlan.slice(0, explicitSectionCount);
+        if (wantsDisclaimerSection && !trimmed.some(isDisclaimerSection)) {
+          const injected = sectionPlan.find(isDisclaimerSection);
+          if (injected) {
+            if (trimmed.length === 0) {
+              trimmed.push(injected);
+            } else {
+              trimmed[trimmed.length - 1] = injected;
+            }
+          }
+        }
+        sectionPlan = trimmed;
       }
-      if (structure.sections.length < explicitSectionCount) {
-        const normalized = new Set(structure.sections.map(s => s.type.toLowerCase()));
+      if (sectionPlan.length < explicitSectionCount) {
+        const normalized = new Set(sectionPlan.map(s => (s.type || '').toLowerCase()));
         for (const tpl of desiredSections) {
-          if (structure.sections.length >= explicitSectionCount) break;
+          if (sectionPlan.length >= explicitSectionCount) break;
           if (!normalized.has(tpl.type.toLowerCase())) {
-            structure.sections.push({ type: tpl.type, title: tpl.title, details: tpl.details });
+            sectionPlan.push({ type: tpl.type, title: tpl.title, details: tpl.details });
             normalized.add(tpl.type.toLowerCase());
           }
         }
       }
     } else {
-      const normalized = new Set(structure.sections.map(s => s.type.toLowerCase()));
+      const normalized = new Set(sectionPlan.map(s => (s.type || '').toLowerCase()));
       const limit = 8;
       for (const section of desiredSections) {
-        if (structure.sections.length >= limit) break;
+        if (sectionPlan.length >= limit) break;
         if (!normalized.has(section.type.toLowerCase())) {
-          structure.sections.push({ type: section.type, title: section.title, details: section.details });
+          sectionPlan.push({ type: section.type, title: section.title, details: section.details });
           normalized.add(section.type.toLowerCase());
         }
       }
     }
-    const mainSections = structure.sections.filter(s => !['terms', 'privacy', 'responsible-gaming'].includes(s.type));
-    const legalSections = structure.sections.filter(s => ['terms', 'privacy', 'responsible-gaming'].includes(s.type));
+    structure.sections = sectionPlan;
+
+    const allowLegalInjection = explicitSectionCount == null;
+
+    if (allowLegalInjection && !sectionPlan.some((s) => (s.type || '').toLowerCase() === 'terms')) {
+      sectionPlan.push({
+        type: 'terms',
+        title: 'Terms & Conditions',
+        details: 'Summarise eligibility (18+), non-monetary nature of the platform, and respectful play guidelines.',
+      });
+    }
+    if (allowLegalInjection && !sectionPlan.some((s) => (s.type || '').toLowerCase() === 'privacy')) {
+      sectionPlan.push({
+        type: 'privacy',
+        title: 'Privacy Snapshot',
+        details: 'Highlight data handling basics, cookie usage, and a link to the full privacy policy.',
+      });
+    }
+    structure.sections = sectionPlan;
+
+    const mainSections = sectionPlan.filter(s => !['terms', 'privacy', 'responsible-gaming'].includes((s.type || '').toLowerCase()));
+    const legalSections = sectionPlan.filter(s => ['terms', 'privacy', 'responsible-gaming'].includes((s.type || '').toLowerCase()));
+    const hasTermsSection = sectionPlan.some((s) => (s.type || '').toLowerCase().includes('terms'));
+    const hasPrivacySection = sectionPlan.some((s) => (s.type || '').toLowerCase().includes('privacy'));
+    const showLegalNavFallback = allowLegalInjection && legalSections.length > 0;
+    const legalLinks: Array<{ label: string; href: string }> = [];
+    if (hasTermsSection) {
+      legalLinks.push({ label: 'Terms & Conditions', href: 'index.html#terms' });
+    }
+    legalLinks.push({ label: 'Privacy Policy', href: 'privacy-policy.html' });
 
     let totalInputTokens = structureResult.usage?.inputTokens ?? 0;
     let totalOutputTokens = structureResult.usage?.outputTokens ?? 0;
@@ -739,6 +1084,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         }
         const res = await generateHtmlForSection({
           section,
+          sitePrompt: prompt,
           theme: themeToUse,
           imageUrl: randomImageUrl,
           language: languageName,
@@ -765,6 +1111,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
 
         const accentClass = SECTION_ACCENTS[accentCursor % SECTION_ACCENTS.length];
         accentCursor += 1;
+        const shapeChoice = pickSectionShape(section, baseSectionShape, i + index);
+        const shapeClass = SECTION_SHAPE_CLASS_MAP[shapeChoice] ?? SECTION_SHAPE_CLASS_MAP.flat;
 
         if (/^<section\b/i.test(cleanHtml)) {
           cleanHtml = cleanHtml.replace(/^<section\b([^>]*)>/i, (match, attrs) => {
@@ -780,23 +1128,30 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
             if (!/data-section-accent=/.test(updated)) {
               updated += ` data-section-accent="${accentClass}"`;
             }
+            if (!/data-section-shape=/.test(updated)) {
+              updated += ` data-section-shape="${shapeChoice}"`;
+            }
             if (/class\s*=/.test(updated)) {
-              updated = updated.replace(/class\s*=\s*"([^"]*)"/i, (full, classes) => {
+              updated = updated.replace(/class\s*=\s*"([^"]*)"/i, (full: string, classes: string) => {
                 const appended = classes.split(/\s+/).filter(Boolean);
-                if (!appended.includes('generated-section')) appended.push('generated-section');
-                if (!appended.includes(accentClass)) appended.push(accentClass);
-                return ` class="${appended.join(' ')}"`;
+                const filtered = appended.filter((cls: string) => cls && !cls.startsWith('shape-'));
+                if (!filtered.includes('generated-section')) filtered.push('generated-section');
+                if (!filtered.includes(accentClass)) filtered.push(accentClass);
+                if (!filtered.includes(shapeClass)) filtered.push(shapeClass);
+                return ` class="${filtered.join(' ')}"`;
               });
             } else {
-              updated += ` class="generated-section ${accentClass}"`;
+              updated += ` class="generated-section ${accentClass} ${shapeClass}"`;
+            }
+            if (/data-section-shape=/.test(updated) && !new RegExp(shapeChoice).test(updated)) {
+              updated = updated.replace(/data-section-shape="[^"]*"/i, ` data-section-shape="${shapeChoice}"`);
             }
             return `<section${updated}>`;
           });
         } else {
           const sectionTypeAttr = section.type ? ` data-section-type="${section.type}"` : '';
-          cleanHtml = `<section id="${candidate}"${sectionTypeAttr} data-section-accent="${accentClass}" class="generated-section ${accentClass}">${cleanHtml}</section>`;
+          cleanHtml = `<section id="${candidate}"${sectionTypeAttr} data-section-accent="${accentClass}" data-section-shape="${shapeChoice}" class="generated-section ${accentClass} ${shapeClass}">${cleanHtml}</section>`;
         }
-
         const sectionLower = cleanHtml.toLowerCase();
         if (sectionLower.includes('cookie') && (sectionLower.includes('accept') || sectionLower.includes('consent'))) {
           return { html: '', model: res.model };
@@ -825,14 +1180,91 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       sectionResults.push(...generated);
     }
 
-    const allSectionsHtml = sectionResults.map(result => result.html).join('\n\n');
     const sortedNavAnchors = navAnchors
       .sort((a, b) => {
         const orderA = a.order ?? (NAV_RULES.length + 100);
         const orderB = b.order ?? (NAV_RULES.length + 100);
         return orderA - orderB;
-      })
-      .slice(0, 4);
+      });
+
+    const hasTermsAnchor = sortedNavAnchors.some((anchor) => /terms/.test(anchor.type) || anchor.id === 'terms');
+    if (!hasTermsAnchor && sectionIdSet.has('terms')) {
+      sortedNavAnchors.push({ id: 'terms', label: 'Terms', type: 'terms', order: NAV_RULES.length + sortedNavAnchors.length });
+    }
+
+    if (legalSections.length) {
+      const legalHint = brandTheme.mode === 'light'
+        ? 'Keep the layout extremely simple: neutral background, clear headings, ordered lists for key policies, and a prominent link to the full document.'
+        : 'Use a flat dark surface with light typography, subtle borders, and concise bullet points summarising the policy.';
+      for (const section of legalSections) {
+        try {
+          const res = await generateHtmlForSection({
+            section,
+            sitePrompt: prompt,
+            theme: themeToUse,
+            language: languageName,
+            styleHint: legalHint,
+            themeMode: brandTheme.mode,
+            ctaTarget: isGameSite ? 'game.html' : undefined,
+          });
+          let cleanHtml = sanitizeSectionHtml(res.htmlContent || '');
+          if (!cleanHtml) continue;
+          const baseCandidate = sanitizeIdCandidate(section.type || section.title || 'legal');
+          const candidate = baseCandidate && !sectionIdSet.has(baseCandidate)
+            ? baseCandidate
+            : `${baseCandidate || 'legal'}-${sectionResults.length + 1}`;
+          sectionIdSet.add(candidate);
+          const accentClass = SECTION_ACCENTS[accentCursor % SECTION_ACCENTS.length];
+          accentCursor += 1;
+          const shapeChoice = 'flat';
+          const shapeClass = SECTION_SHAPE_CLASS_MAP[shapeChoice];
+          if (/^<section\b/i.test(cleanHtml)) {
+            cleanHtml = cleanHtml.replace(/^<section\b([^>]*)>/i, (match, attrs) => {
+              let updated = attrs || '';
+              if (/id\s*=/.test(updated)) {
+                updated = updated.replace(/id\s*=\s*"[^"]*"/i, ` id="${candidate}"`);
+              } else {
+                updated += ` id="${candidate}"`;
+              }
+              if (section.type && !/data-section-type=/.test(updated)) {
+                updated += ` data-section-type="${section.type}"`;
+              }
+              if (!/data-section-accent=/.test(updated)) {
+                updated += ` data-section-accent="${accentClass}"`;
+              }
+              if (!/data-section-shape=/.test(updated)) {
+                updated += ` data-section-shape="${shapeChoice}"`;
+              }
+              if (/class\s*=/.test(updated)) {
+                updated = updated.replace(/class\s*=\s*"([^"]*)"/i, (full: string, classes: string) => {
+                  const filtered = classes.split(/\s+/).filter(Boolean).filter((cls: string) => !cls.startsWith('shape-'));
+                  if (!filtered.includes('generated-section')) filtered.push('generated-section');
+                  if (!filtered.includes(accentClass)) filtered.push(accentClass);
+                  if (!filtered.includes(shapeClass)) filtered.push(shapeClass);
+                  return ` class="${filtered.join(' ')}"`;
+                });
+              } else {
+                updated += ` class="generated-section ${accentClass} ${shapeClass}"`;
+              }
+              return `<section${updated}>`;
+            });
+          } else {
+            const sectionTypeAttr = section.type ? ` data-section-type="${section.type}"` : '';
+            cleanHtml = `<section id="${candidate}"${sectionTypeAttr} data-section-accent="${accentClass}" data-section-shape="${shapeChoice}" class="generated-section ${accentClass} ${shapeClass}">${cleanHtml}</section>`;
+          }
+          sectionResults.push({ html: cleanHtml, model: res.model });
+          if (!navKeysSeen.has(section.type || candidate)) {
+            navKeysSeen.add(section.type || candidate);
+            const legalLabel = section.title || (section.type === 'terms' ? 'Terms & Conditions' : 'Privacy Snapshot');
+            sortedNavAnchors.push({ id: candidate, label: legalLabel, type: section.type || candidate, order: NAV_RULES.length + sortedNavAnchors.length });
+          }
+        } catch (error) {
+          console.warn('Failed to render legal section', error);
+        }
+      }
+    }
+
+    const allSectionsHtml = sectionResults.map(result => result.html).join('\n\n');
 
     const policyLanguage = languageName;
     console.log(`Step 2.3: Generating unique privacy policy in ${policyLanguage}...`);
@@ -881,7 +1313,12 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         selectedFaviconPath,
         layoutPrefs.includeHeader,
         layoutPrefs.includeFooter,
-        selectedLogoAsset?.webPath
+        selectedLogoAsset?.webPath,
+        baseSectionShape,
+        {
+          includeLegalNav: showLegalNavFallback,
+          legalLinks,
+        }
       );
 
       // Bundle the selected game's assets into the export so the iframe works offline.
@@ -898,8 +1335,41 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
 
     // Add standard files
-    files['index.html'] = getIndexHtmlTemplate(title, allSectionsHtml, websiteTypes, sortedNavAnchors, brandTheme, brandVisual, selectedFaviconPath, layoutPrefs.includeHeader, layoutPrefs.includeFooter, selectedLogoAsset?.webPath);
-    files['privacy-policy.html'] = getPrivacyPolicyTemplate(title, normalizedDomain, policyContentHtml, sortedNavAnchors, brandTheme, brandVisual, websiteTypes, selectedFaviconPath, layoutPrefs.includeHeader, layoutPrefs.includeFooter, selectedLogoAsset?.webPath);
+    files['index.html'] = getIndexHtmlTemplate(
+      title,
+      allSectionsHtml,
+      websiteTypes,
+      sortedNavAnchors,
+      brandTheme,
+      brandVisual,
+      selectedFaviconPath,
+      layoutPrefs.includeHeader,
+      layoutPrefs.includeFooter,
+      selectedLogoAsset?.webPath,
+      baseSectionShape,
+      {
+        includeLegalNav: showLegalNavFallback,
+        legalLinks,
+      }
+    );
+    files['privacy-policy.html'] = getPrivacyPolicyTemplate(
+      title,
+      normalizedDomain,
+      policyContentHtml,
+      sortedNavAnchors,
+      brandTheme,
+      brandVisual,
+      websiteTypes,
+      selectedFaviconPath,
+      layoutPrefs.includeHeader,
+      layoutPrefs.includeFooter,
+      selectedLogoAsset?.webPath,
+      baseSectionShape,
+      {
+        includeLegalNav: showLegalNavFallback,
+        legalLinks,
+      }
+    );
     files['scripts/main.js'] = mainJsTemplate;
     files['styles/style.css'] = stylesCssTemplate;
     

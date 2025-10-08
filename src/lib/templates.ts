@@ -69,28 +69,28 @@ const defaultBrandVisual: BrandVisual = {
 };
 
 const fallbackTheme: BrandingTheme = {
-  id: 'default-dark',
+  id: 'minimal-dark',
   mode: 'dark',
-  bodyClass: 'font-sans text-gray-200 bg-slate-900',
-  headerClass: 'bg-slate-900/80 backdrop-blur-sm',
-  navLinkClass: 'text-gray-300 hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition-colors',
-  navActiveClass: 'text-white bg-white/10 shadow-sm',
-  menuToggleClass: 'p-2 inline-flex items-center justify-center rounded-md text-gray-400 hover:text-white focus:outline-none',
-  mobileNavClass: 'mobile-nav-base mobile-nav-hidden bg-slate-900/95 text-gray-200',
-  mobileNavLinkClass: 'text-gray-300 hover:text-white text-3xl font-bold',
+  bodyClass: 'font-sans text-slate-100 bg-[#0b101c]',
+  headerClass: 'bg-[#0b101c]/90 border-b border-white/8 backdrop-blur-lg',
+  navLinkClass: 'text-slate-200 hover:text-white hover:bg-white/10 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+  navActiveClass: 'text-white bg-white/12 shadow-sm',
+  menuToggleClass: 'p-2 inline-flex items-center justify-center rounded-md text-slate-200 hover:text-white focus-visible:ring-2 focus-visible:ring-sky-400/60',
+  mobileNavClass: 'mobile-nav-base mobile-nav-hidden bg-[#0b101c]/95 text-slate-100',
+  mobileNavLinkClass: 'text-slate-100 hover:text-white text-3xl font-semibold',
   mobileNavActiveClass: 'text-white',
-  gameLinkClass: 'text-indigo-400 font-bold hover:bg-gray-700 hover:text-white px-3 py-2 rounded-md text-sm transition-colors',
-  gameActiveClass: 'ring-2 ring-indigo-300/70 ring-offset-2 ring-offset-slate-900',
-  mobileGameLinkClass: 'text-indigo-300 hover:text-white text-3xl font-bold',
+  gameLinkClass: 'text-sky-300 font-semibold hover:bg-sky-400/15 hover:text-white px-3 py-2 rounded-lg text-sm transition-colors',
+  gameActiveClass: 'ring-2 ring-sky-300/70 ring-offset-2 ring-offset-[#0b101c]',
+  mobileGameLinkClass: 'text-sky-300 hover:text-white text-3xl font-semibold',
   mobileGameActiveClass: 'text-white',
-  footerClass: 'bg-slate-800',
-  footerTextClass: 'text-gray-400',
-  cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-slate-800/90 backdrop-blur-sm p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out',
-  cookieTextClass: 'text-sm text-gray-300',
-  cookieButtonClass: 'px-4 py-2 rounded-md bg-indigo-600 text-white drop-shadow-[0_4px_8px_rgba(0,0,0,0.2)] hover:bg-indigo-500 hover:-translate-y-[1px] transition shadow-lg shadow-indigo-500/25',
-  brandBadgeClass: 'bg-white/10 text-white',
-  logoGradient: 'linear-gradient(90deg, #7f5af0 0%, #5a31f0 50%, #0ea5e9 100%)',
-  styleBlock: '.brand-title { background: linear-gradient(90deg,#7f5af0,#5a31f0,#0ea5e9); -webkit-background-clip: text; color: transparent; background-clip: text; }',
+  footerClass: 'bg-[#0b101c]/95 border-t border-white/8 backdrop-blur-lg',
+  footerTextClass: 'text-slate-300/90',
+  cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-[#0b101c]/92 backdrop-blur-lg p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-white/10',
+  cookieTextClass: 'text-sm text-slate-200',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-sky-500 text-white shadow-sm hover:bg-sky-400 transition',
+  brandBadgeClass: 'bg-sky-500/20 text-white',
+  logoGradient: 'linear-gradient(120deg, #38bdf8 0%, #6366f1 50%, #22d3ee 100%)',
+  styleBlock: '.brand-title { color: #e2e8f0; }',
 };
 
 const auroraDarkTheme: BrandingTheme = {
@@ -116,6 +116,31 @@ const auroraDarkTheme: BrandingTheme = {
   brandBadgeClass: 'bg-white/10 text-white shadow-[0_6px_18px_rgba(124,58,237,0.35)]',
   logoGradient: 'linear-gradient(135deg, #c084fc 0%, #818cf8 50%, #22d3ee 100%)',
   styleBlock: '.brand-title { background: linear-gradient(135deg,#c084fc,#818cf8,#22d3ee); -webkit-background-clip: text; color: transparent; background-clip: text; }',
+};
+
+const minimalLightTheme: BrandingTheme = {
+  id: 'minimal-light',
+  mode: 'light',
+  bodyClass: 'font-sans text-slate-800 bg-[#f7f8fb]',
+  headerClass: 'bg-white/90 border-b border-slate-200/80 backdrop-blur-xl',
+  navLinkClass: 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+  navActiveClass: 'text-slate-900 bg-slate-100 shadow-sm',
+  menuToggleClass: 'p-2 inline-flex items-center justify-center rounded-md text-slate-600 hover:text-slate-900 focus-visible:ring-2 focus-visible:ring-slate-400/60',
+  mobileNavClass: 'mobile-nav-base mobile-nav-hidden bg-white/95 text-slate-800',
+  mobileNavLinkClass: 'text-slate-800 hover:text-slate-900 text-3xl font-semibold',
+  mobileNavActiveClass: 'text-slate-900',
+  gameLinkClass: 'text-sky-600 font-semibold hover:bg-sky-100 hover:text-sky-700 px-3 py-2 rounded-lg text-sm transition-colors',
+  gameActiveClass: 'ring-2 ring-sky-300/80 ring-offset-2 ring-offset-white',
+  mobileGameLinkClass: 'text-sky-600 hover:text-sky-700 text-3xl font-semibold',
+  mobileGameActiveClass: 'text-sky-700',
+  footerClass: 'bg-white/90 border-t border-slate-200/80 backdrop-blur-xl',
+  footerTextClass: 'text-slate-500',
+  cookieBannerClass: 'fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-lg p-4 z-50 transform translate-y-full transition-transform duration-300 ease-in-out border-t border-slate-200/80',
+  cookieTextClass: 'text-sm text-slate-600',
+  cookieButtonClass: 'px-4 py-2 rounded-md bg-sky-500 text-white shadow-sm hover:bg-sky-400 transition',
+  brandBadgeClass: 'bg-sky-100 text-sky-700',
+  logoGradient: 'linear-gradient(120deg, #1d4ed8 0%, #0ea5e9 60%, #22d3ee 100%)',
+  styleBlock: '.brand-title { color: #1f2937; }',
 };
 
 const cyberDarkTheme: BrandingTheme = {
@@ -197,6 +222,7 @@ const brandingThemes: BrandingTheme[] = [
   fallbackTheme,
   auroraDarkTheme,
   cyberDarkTheme,
+  minimalLightTheme,
   sunriseLightTheme,
   coastalLightTheme,
 ];
@@ -207,6 +233,47 @@ type ThemeOptions = {
 };
 
 const cloneTheme = (theme: BrandingTheme): BrandingTheme => JSON.parse(JSON.stringify(theme));
+
+const applyContextualStyling = (theme: BrandingTheme, normalizedTypes: string[]): BrandingTheme => {
+  const next = cloneTheme(theme);
+  const isGame = normalizedTypes.some((type) => type.includes('game'));
+  if (isGame) {
+    const gameStyle = `
+:root {
+  --body-font: 'Rajdhani', 'Inter', sans-serif;
+  --heading-font: 'Teko', 'Orbitron', 'Space Grotesk', sans-serif;
+  --accent-font: 'Teko', 'Orbitron', 'Space Grotesk', sans-serif;
+  --hero-glow: 0 36px 92px rgba(56, 189, 248, 0.38);
+  --btn-radius: 0.55rem;
+  --headline-highlight-background: linear-gradient(135deg, rgba(56, 189, 248, 0.26), rgba(129, 140, 248, 0.26));
+  --headline-highlight-color: #e2e8f0;
+  --headline-highlight-glow: rgba(59, 130, 246, 0.5);
+  --headline-highlight-shadow: 0 18px 44px rgba(56, 189, 248, 0.28);
+  --btn-primary-bg: linear-gradient(132deg, #2563eb 0%, #6366f1 48%, #f472b6 100%);
+  --btn-primary-hover: linear-gradient(132deg, #1d4ed8 0%, #4f46e5 48%, #ec4899 100%);
+  --btn-primary-shadow: 0 26px 52px rgba(56, 189, 248, 0.32);
+  --btn-secondary-bg: rgba(148, 163, 184, 0.08);
+  --btn-secondary-hover: rgba(148, 163, 184, 0.16);
+  --btn-secondary-border: rgba(148, 163, 184, 0.28);
+  --btn-secondary-color: rgba(226, 232, 240, 0.92);
+}
+body {
+  font-family: var(--body-font, 'Inter', sans-serif);
+  letter-spacing: 0.01em;
+}
+.headline-kicker {
+  background: rgba(56, 189, 248, 0.18);
+  color: rgba(248, 250, 252, 0.9);
+}
+.hero-headline {
+  letter-spacing: 0.18em;
+}
+`;
+    next.styleBlock = `${next.styleBlock || ''}\n${gameStyle}`;
+    next.logoGradient = 'linear-gradient(135deg, #38bdf8 0%, #6366f1 45%, #f472b6 100%)';
+  }
+  return next;
+};
 
 export function chooseBrandingTheme(options: ThemeOptions = {}): BrandingTheme {
   const { preferredMode, websiteTypes = [] } = options;
@@ -235,8 +302,22 @@ export function chooseBrandingTheme(options: ThemeOptions = {}): BrandingTheme {
     }
   }
 
-  const picked = pool[Math.floor(Math.random() * pool.length)] || fallbackTheme;
-  return cloneTheme(picked);
+  const minimalPool = pool.filter((theme) => theme.id.includes('minimal'));
+  if (preferredMode) {
+    if (minimalPool.length) {
+      return applyContextualStyling(minimalPool[0], normalizedTypes);
+    }
+    const candidate = pool.find((theme) => theme.mode === preferredMode);
+    if (candidate) {
+      return applyContextualStyling(candidate, normalizedTypes);
+    }
+  }
+
+  if (minimalPool.length) {
+    return applyContextualStyling(minimalPool[Math.floor(Math.random() * minimalPool.length)], normalizedTypes);
+  }
+
+  return applyContextualStyling(pool[Math.floor(Math.random() * pool.length)] || fallbackTheme, normalizedTypes);
 }
 
 function resolveTheme(theme?: BrandingTheme): BrandingTheme {
@@ -249,6 +330,35 @@ function resolveBrandVisual(visual?: BrandVisual): BrandVisual {
     primaryIcon: visual.primaryIcon || defaultBrandVisual.primaryIcon,
     secondaryIcon: visual.secondaryIcon || defaultBrandVisual.secondaryIcon,
   };
+}
+
+const DEFAULT_FONT_FAMILIES = [
+  'Inter:wght@400;600;700',
+  'Space+Grotesk:wght@400;600;700',
+];
+const GAME_FONT_FAMILIES = [
+  'Teko:wght@500;600;700',
+  'Orbitron:wght@500;600;700',
+  'Rajdhani:wght@500;600;700',
+];
+
+const isGameContext = (websiteTypes: string[] = []): boolean =>
+  websiteTypes.some((type) => type.toLowerCase().includes('game'));
+
+function resolveFontHref(websiteTypes: string[]): string {
+  const families = [...DEFAULT_FONT_FAMILIES];
+  if (isGameContext(websiteTypes)) {
+    for (const family of GAME_FONT_FAMILIES) {
+      if (!families.includes(family)) {
+        families.push(family);
+      }
+    }
+  }
+  const normalize = (family: string) => family.replace(/\s+/g, '+');
+  const query = families
+    .map((family) => `family=${normalize(family)}`)
+    .join('&');
+  return `https://fonts.googleapis.com/css2?${query}&display=swap`;
 }
 
 function escapeHtmlAttribute(value: string): string {
@@ -305,32 +415,65 @@ type NavItem = {
   href: string;
   label: string;
   active?: boolean;
-  type?: 'game' | 'default';
+  type?: 'game' | 'default' | 'legal';
+};
+
+type NavBuildOptions = {
+  includeLegalFallback?: boolean;
 };
 
 function buildNavItems(
   currentPage: PageContext,
   websiteTypes: string[],
-  sectionAnchors: SectionNavItem[] = []
+  sectionAnchors: SectionNavItem[] = [],
+  options: NavBuildOptions = {}
 ): NavItem[] {
-  const hasGame = websiteTypes.includes('Game');
+  const includeLegalFallback = options.includeLegalFallback ?? true;
+  const hasGame = isGameContext(websiteTypes);
   const items: NavItem[] = [];
   items.push({ href: 'index.html', label: 'Home', active: currentPage === 'index' });
   if (hasGame) {
     items.push({ href: 'game.html', label: 'Play Game!', active: currentPage === 'game', type: 'game' });
   }
   const seen = new Set<string>();
+  let termsAdded = false;
+  let privacyAdded = false;
   for (const anchor of sectionAnchors) {
     const anchorId = (anchor.id || '').trim();
     if (!anchorId) continue;
     const key = anchor.type || anchorId;
     if (seen.has(key)) continue;
     seen.add(key);
-    const href = currentPage === 'index' ? `#${anchorId}` : `index.html#${anchorId}`;
-    const label = anchor.label?.trim() || anchorId.replace(/-/g, ' ');
-    items.push({ href, label });
+    let href = currentPage === 'index' ? `#${anchorId}` : `index.html#${anchorId}`;
+    let label = anchor.label?.trim() || anchorId.replace(/-/g, ' ');
+    let type: NavItem['type'] | undefined;
+    const normalizedKey = key.toLowerCase();
+    const isTermsAnchor = normalizedKey.includes('terms');
+    const isPrivacyAnchor = normalizedKey.includes('privacy');
+    if (isTermsAnchor) {
+      label = 'Terms';
+      type = 'legal';
+      termsAdded = true;
+    }
+    if (isPrivacyAnchor) {
+      label = 'Privacy Policy';
+      href = 'privacy-policy.html';
+      type = 'legal';
+      privacyAdded = true;
+    }
+    const item: NavItem = { href, label, type };
+    if (isPrivacyAnchor && currentPage === 'policy') {
+      item.active = true;
+    }
+    items.push(item);
   }
-  items.push({ href: 'privacy-policy.html', label: 'Privacy', active: currentPage === 'policy' });
+  if (includeLegalFallback && !termsAdded) {
+    const href = currentPage === 'index' ? '#terms' : 'index.html#terms';
+    items.push({ href, label: 'Terms', type: 'legal' });
+  }
+  if (includeLegalFallback && !privacyAdded) {
+    items.push({ href: 'privacy-policy.html', label: 'Privacy Policy', active: currentPage === 'policy', type: 'legal' });
+  }
   return items;
 }
 
@@ -405,8 +548,9 @@ function renderHeader(
   currentPage: PageContext,
   sectionAnchors: SectionNavItem[] = [],
   logoAssetPath?: string,
+  options: NavBuildOptions = {},
 ): string {
-  const items = buildNavItems(currentPage, websiteTypes, sectionAnchors);
+  const items = buildNavItems(currentPage, websiteTypes, sectionAnchors, options);
   return `
     <header id="header" class="${theme.headerClass} fixed top-0 left-0 right-0 z-40 transition-shadow duration-300">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -438,7 +582,10 @@ function renderHeader(
   `;
 }
 
-type FooterVariant = (payload: { title: string; theme: BrandingTheme }) => string;
+type FooterLink = { label: string; href: string };
+type FooterContext = { title: string; theme: BrandingTheme; legalLinks: FooterLink[] };
+
+type FooterVariant = (payload: FooterContext) => string;
 
 const footerVariants: FooterVariant[] = [
   ({ title, theme }) => {
@@ -462,34 +609,40 @@ const footerVariants: FooterVariant[] = [
         </div>
       </div>`;
   },
-  ({ title, theme }) => {
-    const borderClass = theme.mode === 'light' ? 'border-slate-200' : 'border-white/10';
-    const accent = theme.mode === 'light' ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white' : 'bg-gradient-to-r from-indigo-400 to-rose-400 text-slate-900';
+  ({ title, theme, legalLinks }) => {
+    const borderClass = theme.mode === 'light' ? 'border-slate-200/80 bg-white' : 'border-white/10 bg-white/5 backdrop-blur';
+    const accentButton = theme.mode === 'light'
+      ? 'bg-sky-600 hover:bg-sky-500 text-white'
+      : 'bg-sky-500/90 hover:bg-sky-400 text-slate-900';
+    const essentialLinks = [
+      ...legalLinks,
+      { label: 'Contact', href: 'index.html#contact' },
+    ];
     return `
       <div class="max-w-6xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
-        <div class="rounded-3xl border ${borderClass} overflow-hidden flex flex-col md:flex-row items-stretch">
-          <div class="flex-1 p-8 ${theme.footerTextClass}">
-            <h3 class="text-2xl font-semibold mb-3">Stay in the loop</h3>
-            <p class="text-sm opacity-80">Monthly insights, launch announcements, and zero spam. ${title} curates only the essentials.</p>
-            <form class="mt-6 flex gap-3" onsubmit="return false;">
-              <input type="email" required placeholder="name@example.com" class="flex-1 rounded-xl bg-white/10 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-              <button class="${accent} px-5 py-2 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20">Subscribe</button>
+        <div class="rounded-3xl border ${borderClass} flex flex-col md:flex-row items-stretch gap-8 p-8 ${theme.footerTextClass}">
+          <div class="flex-1 flex flex-col gap-3">
+            <h3 class="text-2xl font-semibold">Stay in the loop</h3>
+            <p class="text-sm opacity-80">Monthly highlights, release notes, and responsible gaming updates. ${title} keeps it concise.</p>
+            <form class="mt-2 flex flex-col sm:flex-row gap-3" onsubmit="return false;">
+              <input type="email" required placeholder="name@example.com" class="flex-1 rounded-lg border border-slate-300/40 bg-transparent px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400/60" />
+              <button class="${accentButton} px-5 py-2 rounded-lg text-sm font-semibold shadow-sm transition">Subscribe</button>
             </form>
           </div>
-          <div class="md:w-64 p-8 ${accent} flex flex-col gap-3">
-            <p class="text-sm font-semibold uppercase tracking-wide">Quick links</p>
-            <a href="#" class="text-sm opacity-90 hover:opacity-100 transition">Press kit</a>
-            <a href="#" class="text-sm opacity-90 hover:opacity-100 transition">Brand assets</a>
-            <a href="#" class="text-sm opacity-90 hover:opacity-100 transition">Request a call</a>
-          </div>
+          ${essentialLinks.length ? `
+          <div class="md:w-72 flex flex-col gap-2 text-sm">
+            <span class="text-xs uppercase tracking-wide opacity-70">Essential links</span>
+            ${essentialLinks.map(link => `<a href="${link.href}" class="hover:text-sky-400 transition">${link.label}</a>`).join('\n')}
+          </div>` : ''}
         </div>
         <p class="${theme.footerTextClass} text-xs text-center mt-6">&copy; ${new Date().getFullYear()} ${title}. Crafted concepts, not production builds.</p>
       </div>`;
   },
-  ({ title, theme }) => {
+  ({ title, theme, legalLinks }) => {
     const accentBorder = theme.mode === 'light' ? 'border-indigo-200' : 'border-indigo-500/60';
     const badgeClass = theme.mode === 'light' ? 'bg-indigo-100 text-indigo-600' : 'bg-indigo-500/20 text-indigo-200';
     const textMuted = theme.mode === 'light' ? 'text-slate-600' : 'text-slate-300';
+    const policyHighlight = legalLinks.find(link => link.href.includes('privacy'));
     return `
       <div class="max-w-7xl mx-auto py-10 px-4 sm:px-6 lg:px-8 ${theme.footerTextClass}">
         <div class="grid md:grid-cols-3 gap-8">
@@ -503,21 +656,48 @@ const footerVariants: FooterVariant[] = [
               <h4 class="font-semibold mb-2">Ready to iterate?</h4>
               <p class="${textMuted} text-sm">Request bespoke sections, animations, or CMS-ready handover from the studio team.</p>
             </div>
+            ${policyHighlight ? `
             <div class="rounded-2xl border ${accentBorder} p-5">
               <h4 class="font-semibold mb-2">Need policy details?</h4>
-              <p class="${textMuted} text-sm">Our privacy stance is transparent and human-readable. <a href="privacy-policy.html" class="hover:text-indigo-300">Review the policy</a>.</p>
-            </div>
+              <p class="${textMuted} text-sm">Our privacy stance is transparent and human-readable. <a href="${policyHighlight.href}" class="hover:text-indigo-300">${policyHighlight.label}</a>.</p>
+            </div>` : ''}
           </div>
         </div>
       </div>`;
   },
 ];
 
-function renderFooter(title: string, theme: BrandingTheme): string {
+function renderFooterLegal(theme: BrandingTheme, legalLinks: FooterLink[]): string {
+  if (!legalLinks.length) {
+    return '';
+  }
+  const borderClass = theme.mode === 'light' ? 'border-slate-200/70' : 'border-white/10';
+  const linkClass = theme.mode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-300 hover:text-white';
+  const dividerClass = theme.mode === 'light' ? 'text-slate-400/70' : 'text-white/20';
+  const textClass = theme.mode === 'light' ? 'text-slate-500' : 'text-slate-300/90';
+  return `
+    <div class="mt-8 border-t ${borderClass} pt-6">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${theme.footerTextClass}">
+        <p class="text-xs leading-relaxed ${textClass}">
+          This is a social gaming platform intended for an adult audience (18+) for amusement purposes only. The games do not offer "real money gambling" or an opportunity to win real money or prizes. Practice or success at social casino gaming does not imply future success at "real money gambling."
+        </p>
+        <div class="flex items-center gap-3 text-xs">
+          ${legalLinks.map((link, index) => {
+            const divider = index < legalLinks.length - 1 ? `<span class="${dividerClass}">•</span>` : '';
+            return `<a href="${link.href}" class="${linkClass}">${link.label}</a>${divider}`;
+          }).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderFooter(title: string, theme: BrandingTheme, options: { legalLinks?: FooterLink[] } = {}): string {
+  const legalLinks = options.legalLinks ?? [];
   const variant = randomChoice(footerVariants);
   return `
     <footer class="${theme.footerClass}">
-      ${variant({ title, theme })}
+      ${variant({ title, theme, legalLinks })}
+      ${renderFooterLegal(theme, legalLinks)}
     </footer>
   `;
 }
@@ -588,7 +768,7 @@ function renderCookieBanner(theme: BrandingTheme): string {
         </div>
         <div class="flex items-center gap-3">
           <button id="accept-cookies" class="${theme.cookieButtonClass}">Accept</button>
-          <a href="privacy-policy.html#cookies" class="text-xs sm:text-sm hover:text-white/80">Cookie policy</a>
+          <a href="privacy-policy.html" class="text-xs sm:text-sm hover:text-white/80">Cookie policy</a>
         </div>
       </div>
     </div>
@@ -607,13 +787,18 @@ export const getIndexHtmlTemplate = (
   includeHeader: boolean = true,
   includeFooter: boolean = true,
   logoAssetPath?: string,
+  sectionShape: string = 'soft',
+  options: { includeLegalNav?: boolean; legalLinks?: FooterLink[] } = {},
 ) => {
   const appliedTheme = resolveTheme(theme);
   const brandGlyph = resolveBrandVisual(brandVisual);
-  const hasGame = websiteTypes.includes('Game');
+  const hasGame = isGameContext(websiteTypes);
+  const fontHref = resolveFontHref(websiteTypes);
   const faviconTag = faviconPath
     ? `<link rel="icon" type="image/png" href="${faviconPath}">`
     : '';
+  const includeLegalNav = options.includeLegalNav ?? true;
+  const legalLinks = options.legalLinks ?? [];
   return `
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
@@ -622,7 +807,7 @@ export const getIndexHtmlTemplate = (
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <link href="${fontHref}" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
@@ -632,14 +817,14 @@ export const getIndexHtmlTemplate = (
       ${appliedTheme.styleBlock}
     </style>
 </head>
-<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="index">
-    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index', sectionAnchors, logoAssetPath) : ''}
+<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="index" data-section-shape="${sectionShape}">
+    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'index', sectionAnchors, logoAssetPath, { includeLegalFallback: includeLegalNav }) : ''}
 
     <main class="${includeHeader ? 'pt-16' : ''}">
         ${allSectionsHtml}
     </main>
 
-    ${includeFooter ? renderFooter(title, appliedTheme) : ''}
+    ${includeFooter ? renderFooter(title, appliedTheme, { legalLinks }) : ''}
 
     ${renderCookieBanner(appliedTheme)}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
@@ -728,12 +913,17 @@ export const getGamePageTemplate = (
   includeHeader: boolean = true,
   includeFooter: boolean = true,
   logoAssetPath?: string,
+  sectionShape: string = 'soft',
+  options: { includeLegalNav?: boolean; legalLinks?: FooterLink[] } = {},
 ) => {
   const appliedTheme = resolveTheme(theme);
   const brandGlyph = resolveBrandVisual(brandVisual);
+  const fontHref = resolveFontHref(websiteTypes);
   const faviconTag = faviconPath
     ? `<link rel="icon" type="image/png" href="${faviconPath}">`
     : '';
+  const includeLegalNav = options.includeLegalNav ?? true;
+  const legalLinks = options.legalLinks ?? [];
   const variant = randomChoice(gamePageVariants);
   const headingClass = appliedTheme.mode === 'light' ? 'text-[#1f2440]' : 'text-white';
   const textClass = appliedTheme.mode === 'light' ? 'text-[#3b456a]' : 'text-gray-200/90';
@@ -754,7 +944,7 @@ export const getGamePageTemplate = (
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${gamePageTitle} - ${title}</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&family=Space+Grotesk:wght@400;700&display=swap" rel="stylesheet">
+    <link href="${fontHref}" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" />
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
     <link rel="stylesheet" href="styles/style.css">
@@ -763,8 +953,8 @@ export const getGamePageTemplate = (
       ${appliedTheme.styleBlock}
     </style>
 </head>
-<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="true" data-page="game">
-    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game', sectionAnchors, logoAssetPath) : ''}
+<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="true" data-page="game" data-section-shape="${sectionShape}">
+    ${includeHeader ? renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'game', sectionAnchors, logoAssetPath, { includeLegalFallback: includeLegalNav }) : ''}
 
     <main class="flex-grow flex flex-col items-center justify-center p-4">
         <div class="flex flex-col items-center gap-2 mb-2">
@@ -792,7 +982,7 @@ export const getGamePageTemplate = (
         </div>
     </main>
 
-    ${includeFooter ? renderFooter(title, appliedTheme) : ''}
+    ${includeFooter ? renderFooter(title, appliedTheme, { legalLinks }) : ''}
 
     ${renderCookieBanner(appliedTheme)}
     <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.6/bundled/lenis.min.js"></script>
@@ -815,6 +1005,8 @@ export const getPrivacyPolicyTemplate = (
   includeHeader: boolean = true,
   includeFooter: boolean = true,
   logoAssetPath?: string,
+  sectionShape: string = 'soft',
+  options: { includeLegalNav?: boolean; legalLinks?: FooterLink[] } = {},
 ) => {
   const contactEmail = `contact@${domain}`;
   const policyVariant = randomChoice(policyVariants);
@@ -822,6 +1014,7 @@ export const getPrivacyPolicyTemplate = (
     .map(match => ({ id: match[1], title: match[2] }));
   const appliedTheme = resolveTheme(theme);
   const brandGlyph = resolveBrandVisual(brandVisual);
+  const fontHref = resolveFontHref(websiteTypes);
   const hasGame = websiteTypes.includes('Game');
   const faviconTag = faviconPath
     ? `<link rel="icon" type="image/png" href="${faviconPath}">`
@@ -841,6 +1034,8 @@ export const getPrivacyPolicyTemplate = (
   const sidebarWrapperClass = appliedTheme.mode === 'light'
     ? 'sticky top-24 rounded-2xl border border-[#dbe2ff] bg-white/90 p-6 shadow-[0_14px_36px_rgba(120,130,255,0.15)]'
     : 'sticky top-24 rounded-2xl border border-white/10 bg-white/5 p-6 shadow-[0_22px_45px_rgba(10,5,40,0.55)] backdrop-blur';
+  const includeLegalNav = options.includeLegalNav ?? true;
+  const legalLinks = options.legalLinks ?? [];
   return `
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
@@ -849,7 +1044,7 @@ export const getPrivacyPolicyTemplate = (
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy Policy - ${title}</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <link href="${fontHref}" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
     <link rel="stylesheet" href="styles/style.css">
@@ -858,8 +1053,8 @@ export const getPrivacyPolicyTemplate = (
       ${appliedTheme.styleBlock}
     </style>
 </head>
-<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="policy">
-    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy', sectionAnchors, logoAssetPath)}
+<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="policy" data-section-shape="${sectionShape}">
+    ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy', sectionAnchors, logoAssetPath, { includeLegalFallback: includeLegalNav })}
 
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
         <section class="rounded-3xl border border-white/10 bg-white/5 backdrop-blur mb-12 p-8 ${appliedTheme.mode === 'light' ? 'bg-white shadow-[0_24px_45px_rgba(90,110,255,0.18)] text-slate-700' : 'text-slate-100'}">
@@ -898,7 +1093,7 @@ export const getPrivacyPolicyTemplate = (
         </div>
     </div>
 
-    ${includeFooter ? renderFooter(title, appliedTheme) : ''}
+    ${includeFooter ? renderFooter(title, appliedTheme, { legalLinks }) : ''}
 
     ${renderCookieBanner(appliedTheme)}
     <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.6/bundled/lenis.min.js"></script>
@@ -1128,7 +1323,105 @@ document.addEventListener('DOMContentLoaded', function () {
 `;
 
 export const stylesCssTemplate = `
+:root {
+    --body-font: 'Inter', 'Segoe UI', sans-serif;
+    --heading-font: 'Space Grotesk', 'Inter', sans-serif;
+    --accent-font: 'Space Grotesk', 'Inter', sans-serif;
+    --hero-glow: 0 24px 60px rgba(59, 130, 246, 0.28);
+    --headline-highlight-color: #0f172a;
+    --headline-highlight-background: linear-gradient(120deg, rgba(59, 130, 246, 0.22), rgba(14, 165, 233, 0.18));
+    --headline-highlight-glow: rgba(14, 165, 233, 0.45);
+    --headline-highlight-shadow: 0 12px 30px rgba(59, 130, 246, 0.25);
+    --section-radius: 0.75rem;
+    --section-radius-mobile: calc(var(--section-radius) * 0.9);
+    --section-image-radius: calc(var(--section-radius) - 0.3rem);
+    --section-padding-y: clamp(2rem, 5vw, 3.75rem);
+    --section-padding-x: clamp(1.5rem, 4vw, 3rem);
+    --section-padding-mobile-y: clamp(1.4rem, 5.5vw, 2.15rem);
+    --section-padding-mobile-x: clamp(1rem, 4.5vw, 1.65rem);
+    --section-blur: 14px;
+    --section-border-width: 1px;
+    --section-shadow: 0 16px 36px rgba(8, 12, 24, 0.2);
+    --btn-radius: 0.75rem;
+    --btn-primary-bg: #2563eb;
+    --btn-primary-hover: #1d4ed8;
+    --btn-primary-color: #f8fafc;
+    --btn-primary-shadow: 0 12px 24px rgba(37, 99, 235, 0.2);
+    --btn-secondary-bg: rgba(148, 163, 184, 0.12);
+    --btn-secondary-hover: rgba(148, 163, 184, 0.22);
+    --btn-secondary-color: #1f2937;
+    --btn-secondary-border: rgba(148, 163, 184, 0.4);
+    --icon-surface: rgba(37, 99, 235, 0.08);
+    --icon-border: rgba(37, 99, 235, 0.2);
+    --icon-color: #1f2937;
+}
+
+body {
+    font-family: var(--body-font, 'Inter', sans-serif);
+}
+
+section.generated-section.shape-flat {
+    --section-radius: 0rem;
+    --section-radius-mobile: 0rem;
+    --section-image-radius: 0rem;
+    --section-shadow: 0 14px 32px rgba(7, 12, 24, 0.18);
+    --btn-radius: 0.4rem;
+}
+
+section.generated-section.shape-soft {
+    --section-radius: clamp(1.6rem, 3.5vw, 2.6rem);
+    --section-radius-mobile: calc(var(--section-radius) * 0.7);
+    --section-image-radius: calc(var(--section-radius) - 0.6rem);
+    --section-padding-y: clamp(2.4rem, 5.8vw, 4.2rem);
+    --section-shadow: 0 24px 58px rgba(7, 12, 28, 0.32);
+    --btn-radius: 1.65rem;
+}
+
+section.generated-section.shape-sleek {
+    --section-radius: clamp(1.2rem, 3vw, 2.1rem);
+    --section-radius-mobile: calc(var(--section-radius) * 0.75);
+    --section-image-radius: calc(var(--section-radius) - 0.45rem);
+    --section-shadow: 0 22px 52px rgba(6, 10, 26, 0.3);
+    --btn-radius: 1.1rem;
+}
+
+section.generated-section.shape-angular {
+    --section-radius: 0rem;
+    --section-radius-mobile: 0rem;
+    --section-image-radius: 0rem;
+    --section-padding-y: clamp(2rem, 4.6vw, 3.3rem);
+    --section-padding-x: clamp(1.45rem, 4vw, 2.85rem);
+    --section-shadow: 0 18px 42px rgba(6, 10, 24, 0.28);
+    --section-border-width: 1.4px;
+    --btn-radius: 0.25rem;
+}
+
 body.overflow-hidden { overflow: hidden; }
+body[data-theme-mode="dark"] {
+    --btn-primary-bg: #6366f1;
+    --btn-primary-hover: #4f46e5;
+    --btn-primary-color: #f8fafc;
+    --btn-primary-shadow: 0 12px 30px rgba(99, 102, 241, 0.28);
+    --btn-secondary-bg: rgba(148, 163, 184, 0.18);
+    --btn-secondary-hover: rgba(148, 163, 184, 0.28);
+    --btn-secondary-color: rgba(226, 232, 240, 0.96);
+    --btn-secondary-border: rgba(148, 163, 184, 0.35);
+    --icon-surface: rgba(148, 163, 184, 0.14);
+    --icon-border: rgba(148, 163, 184, 0.18);
+    --icon-color: #f8fafc;
+}
+
+body[data-theme-mode="light"] {
+    --btn-primary-bg: #2563eb;
+    --btn-primary-hover: #1d4ed8;
+    --btn-secondary-bg: rgba(148, 163, 184, 0.12);
+    --btn-secondary-hover: rgba(148, 163, 184, 0.22);
+    --btn-secondary-color: #1f2937;
+    --btn-secondary-border: rgba(148, 163, 184, 0.4);
+    --icon-surface: rgba(37, 99, 235, 0.08);
+    --icon-border: rgba(37, 99, 235, 0.18);
+    --icon-color: #1f2937;
+}
 .mobile-nav-base {
     position: fixed;
     top: 0;
@@ -1180,15 +1473,15 @@ body.overflow-hidden { overflow: hidden; }
 section.generated-section {
     position: relative;
     margin: clamp(1.25rem, 4vw, 3rem) auto;
-    padding: clamp(2rem, 5vw, 4rem) clamp(1.5rem, 4vw, 3.5rem);
-    border-radius: 1.5rem;
+    padding: var(--section-padding-y) var(--section-padding-x);
+    border-radius: var(--section-radius);
     background: var(--section-surface, rgba(17, 24, 39, 0.86));
-    border: 1px solid var(--section-border, rgba(148, 163, 184, 0.12));
+    border: var(--section-border-width, 1px) solid var(--section-border, rgba(148, 163, 184, 0.12));
     box-shadow: var(--section-shadow, 0 22px 60px rgba(8, 12, 24, 0.32));
     color: inherit;
     overflow: hidden;
-    backdrop-filter: blur(16px);
-    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(var(--section-blur, 16px));
+    -webkit-backdrop-filter: blur(var(--section-blur, 16px));
 }
 section.generated-section::before {
     content: '';
@@ -1256,9 +1549,12 @@ body[data-theme-mode="light"] .section-accent-grid {
 }
 
 section.generated-section :where(h1, h2, h3, h4) {
-    font-family: 'Space Grotesk', 'Inter', sans-serif;
-    letter-spacing: -0.01em;
+    font-family: var(--heading-font, 'Space Grotesk', 'Inter', sans-serif);
+    letter-spacing: -0.015em;
     margin-bottom: 0.9em;
+    background: none !important;
+    -webkit-background-clip: border-box !important;
+    -webkit-text-fill-color: currentColor !important;
 }
 
 section.generated-section :where(p) {
@@ -1288,8 +1584,8 @@ section.generated-section :where(img) {
     width: min(520px, 100%);
     max-height: clamp(220px, 45vh, 520px);
     object-fit: cover;
-    border-radius: 1.2rem;
-    margin: clamp(1.25rem, 3.5vw, 2.75rem) auto;
+    border-radius: var(--section-image-radius, calc(var(--section-radius) - 0.4rem));
+    margin: clamp(1.1rem, 3.2vw, 2.35rem) auto;
     box-shadow: 0 18px 45px rgba(12, 18, 35, 0.25);
 }
 
@@ -1312,14 +1608,172 @@ section.generated-section :where(figcaption) {
     text-align: center;
 }
 
+.headline-kicker {
+    font-family: var(--accent-font, var(--heading-font, 'Space Grotesk', 'Inter', sans-serif));
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    background: rgba(59, 130, 246, 0.12);
+    color: rgba(59, 130, 246, 0.9);
+}
+
+.hero-headline {
+    font-family: var(--heading-font, 'Space Grotesk', 'Inter', sans-serif);
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    text-shadow: var(--hero-glow);
+    animation: heroHeadlineGlow 9s ease-in-out infinite;
+}
+
+.hero-headline span {
+    display: inline-block;
+}
+
+.headline-highlight {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 0.12em 0.35em;
+    border-radius: 0.65rem;
+    font-family: var(--accent-font, var(--heading-font, 'Space Grotesk', 'Inter', sans-serif));
+    color: var(--headline-highlight-color, #0f172a);
+    background: var(--headline-highlight-background);
+    box-shadow: var(--headline-highlight-shadow, 0 12px 30px rgba(59, 130, 246, 0.25));
+}
+
+.headline-highlight::after {
+    content: '';
+    position: absolute;
+    inset: 50% -30% -20%;
+    background: var(--headline-highlight-glow);
+    filter: blur(32px);
+    opacity: 0.6;
+    z-index: -1;
+}
+
+.headline-highlight i {
+    font-size: 0.8em;
+}
+
+.hero-headline .headline-highlight {
+    text-transform: none;
+}
+
+@keyframes heroHeadlineGlow {
+    0%, 100% { text-shadow: var(--hero-glow); }
+    45% { text-shadow: 0 18px 48px rgba(99, 102, 241, 0.35); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .hero-headline {
+        animation: none;
+    }
+}
+
+.icon-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.25rem;
+    height: 3.25rem;
+    border-radius: 1rem;
+    background: var(--icon-surface);
+    color: var(--icon-color);
+    border: 1px solid var(--icon-border);
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.16);
+    backdrop-filter: blur(12px);
+    margin-bottom: 1rem;
+}
+
+.icon-badge i {
+    font-size: 1.3rem;
+    line-height: 1;
+}
+
+section.generated-section :where(i.fa-solid, i.fa-regular) {
+    vertical-align: middle;
+}
+
+.btn-primary, a.btn-primary, button.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.85rem 1.75rem;
+    border-radius: var(--btn-radius, 0.75rem);
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-color) !important;
+    box-shadow: var(--btn-primary-shadow);
+    border: none;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, background 0.25s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-primary:hover {
+    background: var(--btn-primary-hover);
+    transform: translateY(-1px);
+}
+
+.btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: -40% -20%;
+    background: linear-gradient(120deg, rgba(255, 255, 255, 0.25), transparent 55%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.btn-primary:hover::after {
+    opacity: 0.6;
+}
+
+.btn-secondary, a.btn-secondary, button.btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.8rem 1.6rem;
+    border-radius: var(--btn-radius, 0.75rem);
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.075em;
+    background: var(--btn-secondary-bg);
+    color: var(--btn-secondary-color) !important;
+    border: 1px solid var(--btn-secondary-border);
+    transition: transform 0.25s ease, background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+}
+
+.btn-secondary:hover {
+    background: var(--btn-secondary-hover);
+    transform: translateY(-1px);
+    border-color: var(--btn-secondary-border);
+}
+
+.btn-primary:focus, .btn-secondary:focus {
+    outline: 2px solid rgba(99, 102, 241, 0.4);
+    outline-offset: 2px;
+}
+
 @media (max-width: 768px) {
     section.generated-section {
-        border-radius: 1.1rem;
-        padding: 1.75rem 1.35rem;
+        border-radius: var(--section-radius-mobile, calc(var(--section-radius) * 0.7));
+        padding: var(--section-padding-mobile-y, 1.75rem) var(--section-padding-mobile-x, 1.35rem);
         margin: 1.25rem auto;
     }
     section.generated-section :where(img) {
-        border-radius: 1rem;
+        border-radius: calc(var(--section-image-radius, 1.2rem) * 0.9);
     }
 }
 .burger-icon.is-open .burger-line:nth-child(1) {

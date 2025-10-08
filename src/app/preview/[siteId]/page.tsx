@@ -54,8 +54,62 @@ const PreviewLoader = () => (
   </div>
 );
 
+const PREVIEW_CACHE_LIMIT = 3_500_000; // ~3.5MB safety margin for sessionStorage
+const DATA_URI_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAAAAACwAAAAAAQABAAA=';
+const DATA_URI_CACHE_THRESHOLD = 240_000;
+
+const splitPreviewTarget = (raw?: string | null): { file: string; hash: string } => {
+  if (typeof raw !== 'string') {
+    return { file: 'index.html', hash: '' };
+  }
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return { file: 'index.html', hash: '' };
+  }
+  const [pathPart, hashPart] = trimmed.split('#', 2);
+  const [filePart] = pathPart.split('?', 1);
+  const normalized = filePart.replace(/^\.?\/+/, '').trim();
+  const file = normalized.length ? normalized : 'index.html';
+  const hash = hashPart ? `#${hashPart}` : '';
+  return { file, hash };
+};
+
+const sanitizeFilesForCache = (files: Record<string, string>): Record<string, string> => {
+  const sanitized: Record<string, string> = {};
+  Object.entries(files).forEach(([key, value]) => {
+    if (typeof value !== 'string') {
+      return;
+    }
+    if (value.startsWith('data:') && value.length > DATA_URI_CACHE_THRESHOLD) {
+      sanitized[key] = DATA_URI_PLACEHOLDER;
+      return;
+    }
+    sanitized[key] = value;
+  });
+  return sanitized;
+};
+
+const safeStorePreviewCache = (siteId: string, files: Record<string, string>) => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const payload = JSON.stringify({ files: sanitizeFilesForCache(files) });
+    if (payload.length > PREVIEW_CACHE_LIMIT) {
+      console.warn(
+        `Preview cache skipped for ${siteId}: payload size ${payload.length} exceeds limit ${PREVIEW_CACHE_LIMIT}`
+      );
+      return false;
+    }
+    window.sessionStorage.setItem(`wg-preview-${siteId}`, payload);
+    return true;
+  } catch (storeErr) {
+    console.warn('Preview cache store failed:', storeErr);
+    return false;
+  }
+};
+
 function buildHtml(files: Record<string, string>, path: string) {
-  const html = files[path] || files['index.html'] || '<!doctype html><title>Preview</title>';
+  const { file: filePath, hash: fragment } = splitPreviewTarget(path);
+  const html = files[filePath] || files['index.html'] || '<!doctype html><title>Preview</title>';
   let processed = html;
   processed = processed.replace(/<script src="scripts\/main.js"><\/script>/, `<script>${files['scripts/main.js'] || ''}<\/script>`);
   processed = processed.replace(/<link rel="stylesheet" href="styles\/style.css">/, `<style>${files['styles/style.css'] || ''}<\/style>`);
@@ -65,25 +119,40 @@ function buildHtml(files: Record<string, string>, path: string) {
       processed = processed.replace(new RegExp(`\"${esc}\"`, 'g'), `"${c}"`).replace(new RegExp(`'${esc}'`, 'g'), `'${c}'`);
     }
   });
-  // Rewrite links to use router messaging to parent
-  const internalPaths = Object.keys(files).filter((p) => p.endsWith('.html'));
-  internalPaths.forEach((p) => {
-    const fileName = p.replace(/^\/?/, '');
-    const esc = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const patterns = [
-      new RegExp(`href=\"${esc}\"`, 'g'),
-      new RegExp(`href=\'${esc}\'`, 'g'),
-      new RegExp(`href=\"\./${esc}\"`, 'g'),
-      new RegExp(`href=\'\./${esc}\'`, 'g'),
-      new RegExp(`href=\"/${esc}\"`, 'g'),
-      new RegExp(`href=\'/${esc}\'`, 'g'),
-    ];
-    patterns.forEach((rx) => {
-      processed = processed.replace(rx, `href=\"#\" data-preview-path=\"${fileName}\"`);
-    });
+  const normalizePath = (href: string) => href.replace(/^\.?\//, '');
+  const isInternal = (href: string) => {
+    const key = normalizePath(href.split('#')[0]);
+    return key in files;
+  };
+
+  processed = processed.replace(/href=\"([^\"#?]+\.html)(#[^\"]*)?\"/g, (match, href, hash = '') => {
+    if (!isInternal(href)) return match;
+    const normalized = normalizePath(href);
+    return `href=\"#\" data-preview-path=\"${normalized}${hash}\"`;
+  });
+
+  processed = processed.replace(/href='([^'#?]+\.html)(#[^']*)?'/g, (match, href, hash = '') => {
+    if (!isInternal(href)) return match;
+    const normalized = normalizePath(href);
+    return `href='#' data-preview-path=\"${normalized}${hash}\"`;
   });
   const routerScript = `\n<script>(function(){document.addEventListener('click',function(e){var a=e.target&&(e.target.closest?e.target.closest('a[data-preview-path]'):null);if(!a)return;e.preventDefault();var p=a.getAttribute('data-preview-path');if(p&&window.parent){window.parent.postMessage({type:'open-path',path:p},'*');}},true);})();</script>`;
-  processed = processed.replace(/<\/body>/i, routerScript + '</body>');
+  const extraScripts: string[] = [routerScript];
+  if (fragment) {
+    const safeHash = fragment
+      .replace(/\\/g, '\\\\')
+      .replace(/'/g, "\\'")
+      .replace(/`/g, '\\`')
+      .replace(/<\/script>/gi, '<\\/script>');
+    const hashScript = `\n<script>(function(){try{var hash='${safeHash}';if(hash&&hash.length>1){if(hash.charAt(0)==='#'){hash=hash.slice(1);}if(hash){location.hash=hash;}}}catch(err){}})();</script>`;
+    extraScripts.push(hashScript);
+  }
+  const scriptBundle = extraScripts.join('');
+  if (/<\/body>/i.test(processed)) {
+    processed = processed.replace(/<\/body>/i, `${scriptBundle}</body>`);
+  } else {
+    processed = `${processed}${scriptBundle}`;
+  }
   return processed;
 }
 
@@ -125,7 +194,7 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
           setFiles(data.files as Record<string, string>);
           try {
             if (typeof window !== 'undefined') {
-              window.sessionStorage.setItem(`wg-preview-${siteId}`, JSON.stringify({ files: data.files }));
+              safeStorePreviewCache(siteId, data.files as Record<string, string>);
             }
           } catch (storeErr) {
             console.warn('Preview cache store failed:', storeErr);
@@ -171,7 +240,7 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
         setFiles(map);
         try {
           if (typeof window !== 'undefined') {
-            window.sessionStorage.setItem(`wg-preview-${siteId}`, JSON.stringify({ files: map }));
+            safeStorePreviewCache(siteId, map);
           }
         } catch (storeErr) {
           console.warn('Preview cache store failed:', storeErr);
@@ -196,7 +265,7 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
           setFiles(map);
           try {
             if (typeof window !== 'undefined') {
-              window.sessionStorage.setItem(`wg-preview-${siteId}`, JSON.stringify({ files: map }));
+              safeStorePreviewCache(siteId, map);
             }
           } catch (storeErr) {
             console.warn('Preview cache store failed:', storeErr);
@@ -224,7 +293,7 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
           setFiles(map);
           try {
             if (typeof window !== 'undefined') {
-              window.sessionStorage.setItem(`wg-preview-${siteId}`, JSON.stringify({ files: map }));
+              safeStorePreviewCache(siteId, map);
             }
           } catch (storeErr) {
             console.warn('Preview cache store failed:', storeErr);
@@ -239,7 +308,16 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
   useEffect(() => {
     const onMsg = (e: MessageEvent) => {
       if (e.data && e.data.type === 'open-path') {
-        setCurrentPath(e.data.path);
+        const rawPath = typeof e.data.path === 'string' ? e.data.path : '';
+        const extraHash = typeof e.data.hash === 'string' ? e.data.hash : '';
+        const base = splitPreviewTarget(rawPath);
+        const hashCandidate = extraHash
+          ? extraHash.startsWith('#')
+            ? extraHash
+            : `#${extraHash.replace(/^#/, '')}`
+          : base.hash;
+        const nextPath = hashCandidate ? `${base.file}${hashCandidate}` : base.file;
+        setCurrentPath(nextPath);
       }
     };
     window.addEventListener('message', onMsg);

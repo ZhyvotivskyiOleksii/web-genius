@@ -38,16 +38,22 @@ function SubmitButton({ isPending, isAuthed, onRequireAuth }: { isPending: boole
   );
 }
 
-const initialEnhanceState = {
+type EnhanceState = {
+  success: boolean;
+  error: string;
+  enhancedPrompt: string;
+};
+
+const initialEnhanceState: EnhanceState = {
   success: false,
-  error: null,
+  error: '',
   enhancedPrompt: '',
 };
 
 export function SiteGeneratorForm({ formAction, isPending, state, modelName, onStartGenerating, isAuthed = true, onRequireAuth }: { formAction: (payload: FormData) => void, isPending: boolean, state: any, modelName: string, onStartGenerating?: (siteName: string) => void, isAuthed?: boolean, onRequireAuth?: () => void }) {
   const { toast } = useToast();
   const [prompt, setPrompt] = useState('');
-  const [enhanceState, enhanceFormAction, isEnhancing] = useActionState(enhancePromptAction, initialEnhanceState);
+  const [enhanceState, enhanceFormAction, isEnhancing] = useActionState<EnhanceState, FormData>(enhancePromptAction, initialEnhanceState);
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
   const typeOptions = [

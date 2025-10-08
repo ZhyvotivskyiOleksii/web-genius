@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 
 type Snippet = {
   text: string;
@@ -58,31 +59,23 @@ export function FallingCodeBg({ count = 10 }: { count?: number }) {
 
   return (
     <div className="falling-code-layer fade-out" aria-hidden suppressHydrationWarning>
-      {items.map((s, i) => (
-        <pre
-          key={i}
-          className="falling-code animate"
-          style={{
-            left: `${s.x}%`,
-            // CSS custom props consumed by CSS animation in globals.css
-            // @ts-expect-error custom property
-            "--rot": `${s.rot}deg`,
-            // @ts-expect-error custom property
-            "--h": `${s.hue}`,
-            // @ts-expect-error custom property
-            "--dur": `${s.dur}s`,
-            // @ts-expect-error custom property
-            "--delay": `${s.delay}s`,
-            // @ts-expect-error custom property
-            "--start": s.start,
-            // @ts-expect-error custom property
-            "--end": s.end,
-            fontSize: `${s.size}px`,
-          } as React.CSSProperties}
-        >
-          {s.text}
-        </pre>
-      ))}
+      {items.map((s, i) => {
+        const style: CSSProperties & Record<'--rot' | '--h' | '--dur' | '--delay' | '--start' | '--end', string> = {
+          left: `${s.x}%`,
+          '--rot': `${s.rot}deg`,
+          '--h': `${s.hue}`,
+          '--dur': `${s.dur}s`,
+          '--delay': `${s.delay}s`,
+          '--start': s.start,
+          '--end': s.end,
+          fontSize: `${s.size}px`,
+        };
+        return (
+          <pre key={i} className="falling-code animate" style={style}>
+            {s.text}
+          </pre>
+        );
+      })}
     </div>
   );
 }

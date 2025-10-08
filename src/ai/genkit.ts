@@ -11,8 +11,4 @@ if (!process.env.GOOGLE_GENAI_API_KEY && process.env.GEMINI_API_KEY) {
 export const ai = genkit({
   plugins: [googleAI()],
   model: MODEL_NAME,
-  generationConfig: {
-    // Higher temperature to increase variety/creativity of sites
-    temperature: 0.9,
-  }
 });

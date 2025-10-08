@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useActionState, useState, useEffect, useRef, useMemo, useCallback } from "react";
+import type { Session, AuthChangeEvent } from "@supabase/supabase-js";
 import { generateWebsiteAction } from "@/app/actions";
 import { SiteGeneratorForm } from "@/components/site-generator-form";
 import { SitePreview } from "@/components/site-preview";
@@ -19,14 +20,17 @@ import { useRouter } from "next/navigation";
 import { Clock, LogOut, FolderKanban, ArrowUpRight, Loader2, ExternalLink, RefreshCw } from "lucide-react";
 import Link from "next/link";
 
-const initialState: {
+type GenerateState = {
   success: boolean;
-  error: string | null;
-  fieldErrors?: Record<string, string[]>;
+  error: string;
+  fieldErrors?: Record<string, string[]> | null;
   site: Site | null;
-} = {
+};
+
+const initialState: GenerateState = {
   success: false,
-  error: null,
+  error: '',
+  fieldErrors: null,
   site: null,
 };
 
@@ -101,7 +105,7 @@ const extractLiveUrl = (meta?: Record<string, any> | null) => {
 };
 
 export default function Home() {
-  const [state, formAction, isPending] = useActionState(
+  const [state, formAction, isPending] = useActionState<GenerateState, FormData>(
     generateWebsiteAction,
     initialState
   );
@@ -156,7 +160,7 @@ export default function Home() {
         setUserAvatar(profile2.avatar ?? profile1.avatar ?? null);
         setDisplayName(profile2.name ?? profile1.name ?? null);
 
-        const { data: { subscription } } = sb.auth.onAuthStateChange((_event, sess) => {
+        const { data: { subscription } } = sb.auth.onAuthStateChange((_event: AuthChangeEvent, sess: Session | null) => {
           setUserId(sess?.user?.id ?? null);
           const p = extractProfileFromUser(sess?.user as any);
           setUserAvatar(p.avatar ?? null);

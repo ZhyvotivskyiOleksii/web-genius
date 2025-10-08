@@ -12,8 +12,12 @@ import { z } from 'zod';
 import { encryptText, decryptText } from '@/lib/crypto';
 import { revalidateTag, unstable_cache } from 'next/cache';
 import { parse } from 'parse5';
-import type { DefaultTreeDocument, DefaultTreeElement, DefaultTreeNode } from 'parse5/dist/tree-adapters/default';
-import type { Attribute } from 'parse5/dist/common/token';
+import type { DefaultTreeAdapterMap } from 'parse5';
+
+type DefaultTreeDocument = DefaultTreeAdapterMap['document'];
+type DefaultTreeElement = DefaultTreeAdapterMap['element'];
+type DefaultTreeNode = DefaultTreeAdapterMap['node'];
+type Attribute = { name: string; value: string };
 
 type UsageLike = {
   inputTokens?: number | null;
@@ -293,11 +297,11 @@ function parsePathSegments(path: string): PathSegment[] {
 
 function findBodyNode(doc: DefaultTreeDocument): DefaultTreeElement | null {
   const htmlNode = (doc.childNodes || []).find(
-    (node): node is DefaultTreeElement => isElementNode(node) && node.tagName === 'html'
+    (node: DefaultTreeNode): node is DefaultTreeElement => isElementNode(node) && node.tagName === 'html'
   );
   if (!htmlNode) return null;
   const bodyNode = (htmlNode.childNodes || []).find(
-    (node): node is DefaultTreeElement => isElementNode(node) && node.tagName === 'body'
+    (node: DefaultTreeNode): node is DefaultTreeElement => isElementNode(node) && node.tagName === 'body'
   );
   return bodyNode || null;
 }
@@ -503,8 +507,8 @@ export async function generateWebsiteAction(prevState: any, formData: FormData) 
     const result = {
       success: true,
       site: safeSite,
-      error: null,
-      fieldErrors: null,
+      error: '',
+      fieldErrors: null as Record<string, string[]> | null,
     } as const;
 
     return structuredClone(result);
@@ -937,14 +941,14 @@ export async function editCodeBulkAction(prevState: any, formData: FormData) {
     if (result.modifications && result.modifications.length > 0) {
       const changes: Record<string, string> = {};
       // Предполагаем, что `modifications` - это массив объектов с `fileName` и `code`
-      result.modifications.forEach((mod: { fileName: string, code: string, status?: string }) => {
+      result.modifications.forEach((mod: { fileName: string; code: string | null; status?: string }) => {
         const before = originalMap.get(mod.fileName) ?? '';
         const after = mod.code ?? '';
         const stats = computeDiffStats(before, after);
         diffSummaries.push({ file: mod.fileName, added: stats.added, removed: stats.removed });
         // Сохраняем только обновленные или созданные файлы
         if (!mod.status || mod.status === 'updated' || mod.status === 'created') {
-          changes[mod.fileName] = mod.code;
+          changes[mod.fileName] = after;
         }
       });
 
@@ -1014,7 +1018,7 @@ const enhancePromptSchema = z.object({
     prompt: z.string(),
 });
 
-export async function enhancePromptAction(prevState: any, formData: FormData): Promise<{ success: boolean; enhancedPrompt?: string; error?: string; }> {
+export async function enhancePromptAction(prevState: any, formData: FormData): Promise<{ success: boolean; enhancedPrompt: string; error: string; }> {
     const validatedFields = enhancePromptSchema.safeParse({ 
         prompt: formData.get('prompt') 
     });
@@ -1023,6 +1027,7 @@ export async function enhancePromptAction(prevState: any, formData: FormData): P
         return {
             success: false,
             error: 'Invalid prompt for enhancement.',
+            enhancedPrompt: '',
         };
     }
     
@@ -1033,12 +1038,14 @@ export async function enhancePromptAction(prevState: any, formData: FormData): P
         return {
             success: true,
             enhancedPrompt: result.enhancedPrompt,
+            error: '',
         };
     } catch (error) {
         console.error('Prompt enhancement failed:', error);
         return {
             success: false,
             error: 'An unexpected error occurred during prompt enhancement.',
+            enhancedPrompt: '',
         };
     }
 }
