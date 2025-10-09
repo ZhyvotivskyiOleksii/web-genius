@@ -800,6 +800,25 @@ function resolveLanguage(prompt: string, websiteTypes: string[]): { name: string
   return detectLanguage(prompt);
 }
 
+function levenshteinDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  const dp: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
+  for (let i = 0; i < rows; i += 1) dp[i][0] = i;
+  for (let j = 0; j < cols; j += 1) dp[0][j] = j;
+  for (let i = 1; i < rows; i += 1) {
+    for (let j = 1; j < cols; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[rows - 1][cols - 1];
+}
+
 function detectPreferredThemeMode(prompt: string): 'light' | 'dark' | undefined {
   const text = (prompt || '').toLowerCase();
   const lightHints = [
@@ -817,6 +836,29 @@ function detectPreferredThemeMode(prompt: string): 'light' | 'dark' | undefined 
   ];
   if (lightHints.some((token) => text.includes(token))) return 'light';
   if (darkHints.some((token) => text.includes(token))) return 'dark';
+
+  const cleaned = text
+    .replace(/[^a-zа-яёіїґ\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const tokens = cleaned.split(' ').filter(Boolean);
+
+  const fuzzyMatch = (targets: string[], maxDistance: number) => {
+    return targets.some((target) => {
+      const base = target.toLowerCase();
+      return tokens.some((token) => {
+        if (Math.abs(token.length - base.length) > maxDistance + 1) return false;
+        return levenshteinDistance(token, base) <= maxDistance;
+      });
+    });
+  };
+
+  const lightFuzzy = ['светлая', 'світла', 'світлий', 'light', 'легка', 'bright'];
+  const darkFuzzy = ['темная', 'темна', 'темний', 'dark', 'night', 'тёмная'];
+
+  if (fuzzyMatch(lightFuzzy, 3)) return 'light';
+  if (fuzzyMatch(darkFuzzy, 2)) return 'dark';
+
   const lightRegexes = [
     /\bсве[тд]?\w*\s+(?:тема|стиль|фон|палитр|схема|цвет)/,
     /\blig?ht\s+(?:theme|mode|palette|scheme)\b/,

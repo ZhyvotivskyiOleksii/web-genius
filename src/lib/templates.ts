@@ -438,7 +438,14 @@ function buildNavItems(
   const seen = new Set<string>();
   let termsAdded = false;
   let privacyAdded = false;
-  for (const anchor of sectionAnchors) {
+  const MAX_SECTION_ITEMS = 4;
+  const anchorCandidates = (sectionAnchors || [])
+    .filter((anchor) => anchor && anchor.id)
+    .filter((anchor) => !(anchor.type || '').toLowerCase().startsWith('section-'))
+    .sort((a, b) => (a.order ?? 999) - (b.order ?? 999));
+  let sectionCount = 0;
+  for (const anchor of anchorCandidates) {
+    if (sectionCount >= MAX_SECTION_ITEMS) break;
     const anchorId = (anchor.id || '').trim();
     if (!anchorId) continue;
     const key = anchor.type || anchorId;
@@ -466,6 +473,7 @@ function buildNavItems(
       item.active = true;
     }
     items.push(item);
+    sectionCount += 1;
   }
   if (includeLegalFallback && !termsAdded) {
     const href = currentPage === 'index' ? '#terms' : 'index.html#terms';
@@ -829,7 +837,6 @@ export const getIndexHtmlTemplate = (
     ${renderCookieBanner(appliedTheme)}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.6/bundled/lenis.min.js"></script>
     <script src="scripts/main.js"></script>
 </body>
 </html>
@@ -985,7 +992,6 @@ export const getGamePageTemplate = (
     ${includeFooter ? renderFooter(title, appliedTheme, { legalLinks }) : ''}
 
     ${renderCookieBanner(appliedTheme)}
-    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.6/bundled/lenis.min.js"></script>
     <script src="scripts/main.js"></script>
 </body>
 </html>
@@ -1096,7 +1102,6 @@ export const getPrivacyPolicyTemplate = (
     ${includeFooter ? renderFooter(title, appliedTheme, { legalLinks }) : ''}
 
     ${renderCookieBanner(appliedTheme)}
-    <script src="https://cdn.jsdelivr.net/npm/@studio-freight/lenis@1.0.6/bundled/lenis.min.js"></script>
     <script src="scripts/main.js"></script>
 </body>
 </html>`;
@@ -1112,20 +1117,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return true;
         }
     })();
-    if (!isEmbedded && window.Lenis) {
-        const lenis = new window.Lenis({
-            lerp: 0.08,
-            smoothWheel: true,
-            wheelMultiplier: 1.05,
-        });
-        function raf(time) {
-            lenis.raf(time);
-            requestAnimationFrame(raf);
-        }
-        requestAnimationFrame(raf);
-    } else {
-        document.body.dataset.smoothScroll = 'native';
-    }
+    document.body.dataset.smoothScroll = isEmbedded ? 'embedded' : 'native';
     // --- Mobile Menu Logic ---
     const burgerMenu = document.getElementById('burger-menu');
     const burgerIcon = document.getElementById('burger-icon');

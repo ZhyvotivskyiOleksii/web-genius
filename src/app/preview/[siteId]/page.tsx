@@ -136,7 +136,18 @@ function buildHtml(files: Record<string, string>, path: string) {
     const normalized = normalizePath(href);
     return `href='#' data-preview-path=\"${normalized}${hash}\"`;
   });
-  const routerScript = `\n<script>(function(){document.addEventListener('click',function(e){var a=e.target&&(e.target.closest?e.target.closest('a[data-preview-path]'):null);if(!a)return;e.preventDefault();var p=a.getAttribute('data-preview-path');if(p&&window.parent){window.parent.postMessage({type:'open-path',path:p},'*');}},true);})();</script>`;
+
+  processed = processed
+    .replace(
+      /(href|src)=\"(games\/[^\"]+)\"/g,
+      (_match, attr, path) => `${attr}="/${path}"`
+    )
+    .replace(
+      /(href|src)='(games\/[^']+)'/g,
+      (_match, attr, path) => `${attr}='/${path}'`
+    );
+
+  const routerScript = `\n<script>(function(){document.addEventListener('click',function(e){var a=e.target&&(e.target.closest?e.target.closest('a[data-preview-path]'):null);if(!a)return;e.preventDefault();if(typeof e.stopImmediatePropagation==='function'){e.stopImmediatePropagation();}else if(typeof e.stopPropagation==='function'){e.stopPropagation();}var p=a.getAttribute('data-preview-path');if(p&&window.parent){window.parent.postMessage({type:'open-path',path:p},'*');}},true);})();</script>`;
   const extraScripts: string[] = [routerScript];
   if (fragment) {
     const safeHash = fragment
