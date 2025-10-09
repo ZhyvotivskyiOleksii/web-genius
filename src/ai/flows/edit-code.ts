@@ -8,7 +8,7 @@
  * - EditCodeOutput - The return type for the editCode function.
  */
 
-import {ai} from '@/ai/genkit';
+import {ai, getAI} from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
 import {z} from 'genkit';
 
@@ -20,6 +20,7 @@ const EditCodeInputSchema = z.object({
       'A prompt describing the desired changes. Be precise and clear.'
     ),
   fileName: z.string().describe('The name of the file being edited.'),
+  model: z.string().optional(),
 });
 export type EditCodeInput = z.infer<typeof EditCodeInputSchema>;
 
@@ -78,12 +79,15 @@ const editCodeFlow = ai.defineFlow(
     outputSchema: EditCodeFlowOutputSchema,
   },
   async input => {
-    const response = await prompt(input);
+    // Rebind prompt to chosen model per-request
+    const localAI = getAI(input.model);
+    const localPrompt = localAI.definePrompt({ name: 'editCodePromptDynamic', input: { schema: EditCodeInputSchema }, output: { schema: EditCodePromptOutputSchema }, prompt: (prompt as any).prompt });
+    const response = await localPrompt(input);
     const output = response.output!;
     return {
       ...output,
       usage: response.usage || undefined,
-      model: response.model || MODEL_NAME,
+      model: response.model || (input.model ?? MODEL_NAME),
     };
   }
 );

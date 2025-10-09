@@ -1,7 +1,7 @@
 // File: src/ai/flows/generate-game-page-content.ts
 'use server';
 
-import { ai } from '@/ai/genkit';
+import { ai, getAI } from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
 import { z } from 'zod';
 
@@ -14,22 +14,18 @@ export type GamePageContent = z.infer<typeof GamePageContentOutputSchema>;
 const GamePageContentInputSchema = z.object({
   siteName: z.string(),
   language: z.string().optional(),
+  model: z.string().optional(),
 });
 
-const gamePagePrompt = ai.definePrompt({
-  name: 'gamePagePrompt',
-  input: { schema: GamePageContentInputSchema },
-  output: { schema: GamePageContentOutputSchema },
-  prompt: `Ти — креативний копірайтер та дизайнер для сайтів соціальних казино. Твоє завдання — створити контент для ігрової сторінки.
+const baseGamePrompt = `Ти — креативний копірайтер та дизайнер для сайтів соціальних казино. Твоє завдання — створити контент для ігрової сторінки.
 
 **Інструкції:**
 1.  **Придумай яскравий, захоплюючий заголовок** мовою {{#if language}}{{language}}{{else}}англійською{{/if}}. Він має підкреслювати, що гра безкоштовна, соціальна і для розваги.
-2.  **Створи крутий, помітний HTML-блок для дисклеймера 18+** тією самою мовою. Він має бути стильним і привертати увагу, використовуючи класи TailwindCSS (наприклад, градієнтний фон, тінь, іконку Font Awesome). Дисклеймер має чітко вказувати, що ігри призначені для дорослої аудиторії (18+), не пропонують реальних грошей і створені виключно для розваги.
-3.  Категорично уникай слів про джекпоти, депозити, ставки, бонуси, виплати, лотереї чи «real money wins». Наголошуй, що це безкоштовний демонстраційний досвід без можливості поповнення рахунку чи отримання грошових призів.
+2.  **Створи крутий, помітний HTML-блок для дисклеймера 18+** тією самою мовою. Він має бути стильним і привертати увагу, використовуючи класи TailwindCSS (наприклад, градієнтний фон, тінь, іконку Font Awesome). Дисклеймер має чітко вказувати, що ігри призначені для дорослої аудиторії (18+), не пропонують реальних грошей і створені виключно для розваги. Не використовуй емодзі — тільки іконки FA.
+3.  Категорично уникай слів про джекпоти, депозити, ставки, бонуси, виплати, лотереї чи «real money wins». Наголошуй, що це безкоштовний демонстраційний досвід без можливості поповнення рахунку чи отримання грошових призів. Уникай емодзі.
 
 **Контекст сайту:**
--   Назва: "{{siteName}}"`,
-});
+-   Назва: "{{siteName}}"`;
 
 export const generateGamePageContent = ai.defineFlow(
   {
@@ -41,11 +37,18 @@ export const generateGamePageContent = ai.defineFlow(
     }),
   },
   async (input) => {
+    const localAI = getAI(input.model);
+    const gamePagePrompt = localAI.definePrompt({
+      name: 'gamePagePromptDynamic',
+      input: { schema: GamePageContentInputSchema },
+      output: { schema: GamePageContentOutputSchema },
+      prompt: baseGamePrompt,
+    });
     const response = await gamePagePrompt(input);
     return {
       ...response.output!,
       usage: response.usage,
-      model: response.model || MODEL_NAME,
+      model: response.model || (input.model ?? MODEL_NAME),
     };
   }
 );

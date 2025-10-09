@@ -1,7 +1,7 @@
 // Файл: src/ai/flows/generate-site-structure.ts
 'use server';
 
-import { ai } from '@/ai/genkit';
+import { ai, getAI } from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
 import { z } from 'zod';
 
@@ -37,19 +37,11 @@ export type SiteStructureFlowResult = z.infer<typeof SiteStructureFlowOutputSche
 const SiteStructureInputSchema = z.object({
   prompt: z.string(),
   language: z.string().optional(),
+  model: z.string().optional(),
 });
 
 // Промпт для нашего "архитектора"
-const structurePrompt = ai.definePrompt({
-  name: 'siteStructurePrompt',
-  input: { schema: SiteStructureInputSchema },
-  output: { schema: SiteStructureOutputSchema },
-  prompt: `Ты — AI-архитектор веб-сайтов. Проанализируй запрос пользователя и создай план сайта в формате JSON. НЕ генерируй HTML. Твоя задача — только создать структуру. Если пользователь явно указал, сколько секций или блоков нужно сделать, соблюдай это число (например, «1 секция» значит только одну секцию). В остальных случаях предложи 3-5 самых подходящих секций.
-
-Обязательно используй язык {{#if language}}{{language}}{{else}}пользовательского запроса{{/if}} во всех заголовках и описаниях.
-
-Запрос пользователя: "{{prompt}}"`,
-});
+// Промпт создаём внутри флоу, чтобы можно было подставить выбранную модель.
 
 // Genkit-флоу
 export const generateSiteStructure = ai.defineFlow(
@@ -59,20 +51,32 @@ export const generateSiteStructure = ai.defineFlow(
     outputSchema: SiteStructureFlowOutputSchema,
   },
   async (input) => {
-    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    const localAI = getAI(input.model);
+    const structurePrompt = localAI.definePrompt({
+      name: 'siteStructurePrompt',
+      input: { schema: SiteStructureInputSchema },
+      output: { schema: SiteStructureOutputSchema },
+      prompt: `Ты — AI-архитектор веб-сайтов. Проанализируй запрос пользователя и создай план сайта в формате JSON. НЕ генерируй HTML. Твоя задача — только создать структуру. Если пользователь явно указал, сколько секций или блоков нужно сделать, соблюдай это число (например, «1 секция» значит только одну секцию). В остальных случаях предложи 3-5 самых подходящих секций.
+
+Обязательно используй язык {{#if language}}{{language}}{{else}}пользовательского запроса{{/if}} во всех заголовках и описаниях.
+Никогда не используй эмодзи или Unicode‑пиктограммы в названиях и описаниях секций — только обычный текст.
+
+Запрос пользователя: "{{prompt}}"`,
+    });
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
     let lastErr: any = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
         const response = await structurePrompt(input);
         const output = response.output!;
         return {
           ...output,
           usage: response.usage || undefined,
-          model: response.model || MODEL_NAME,
+          model: response.model || (input.model ?? MODEL_NAME),
         };
       } catch (err) {
         lastErr = err;
-        const backoff = Math.min(3000, 500 * attempt);
+        const backoff = Math.min(4500, 600 * attempt);
         await sleep(backoff);
       }
     }

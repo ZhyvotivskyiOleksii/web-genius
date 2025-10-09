@@ -12,6 +12,7 @@ import {
   getIndexHtmlTemplate,
   getGamePageTemplate,
   getPrivacyPolicyTemplate,
+  getTermsPageTemplate,
   mainJsTemplate,
   stylesCssTemplate,
   chooseBrandingTheme,
@@ -113,6 +114,18 @@ const SECTION_SHAPE_HINTS: Array<{ pattern: RegExp; shapes: SectionShape[] }> = 
   { pattern: /(features|cards|gallery|about|story|benefit)/i, shapes: ['soft', 'sleek', 'flat'] },
   { pattern: /(contact|support|legal|policy|terms)/i, shapes: ['flat', 'angular'] },
 ];
+
+// Remove emojis and non‑ASCII pictographs to keep design clean and consistent
+function stripEmojis(html: string): string {
+  if (!html) return '';
+  // Blocks: Misc Symbols, Dingbats, Emoticons, Supplemental Symbols and Pictographs, Symbols and Pictographs Extended-A,
+  // plus common variation selectors and zero-width joiners.
+  const emojiRegex = /[\u{1F300}-\u{1F6FF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}]/gu;
+  let cleaned = html.replace(emojiRegex, '');
+  // Also strip any remaining surrogate pairs in the emoji range
+  cleaned = cleaned.replace(/[\uD83C-\uDBFF][\uDC00-\uDFFF]/g, '');
+  return cleaned;
+}
 
 const resolveExistingPath = (...segments: string[]): string => {
   const attempts: string[] = [];
@@ -649,7 +662,7 @@ const createLocalizedHeroSection = (language: string, siteName: string) => {
       return {
         type: 'hero',
         title: `Welcome to ${siteName}`,
-        details: 'Craft a welcoming hero section that spotlights the social casino vibe, free tournaments, and nightly rewards.',
+        details: 'Create a welcoming hero that highlights the social gaming vibe, free community events, and nightly highlights. No real‑money play.',
       };
   }
 };
@@ -678,7 +691,7 @@ function createFallbackStructure(siteName: string, language: string, prompt: str
           ? 'Wypunktuj 3 atuty: codzienna pula monet, wydarzenia społecznościowe i brak prawdziwych stawek.'
           : language === 'Ukrainian'
             ? 'Підкресли 3 переваги: щоденні бонуси, спільнотні івенти та відсутність ставок.'
-            : 'Highlight three perks: daily bonus drops, community challenges, and zero real-money wagering.',
+            : 'Highlight three perks: daily perks, community challenges, and zero real‑money wagering.',
       },
       {
         type: 'cta',
@@ -947,7 +960,7 @@ function parseLayoutPreferences(prompt: string): { includeHeader: boolean; inclu
   return { includeHeader, includeFooter };
 }
 
-export async function generateSingleSite(prompt: string, siteName: string, websiteTypes: string[] = [], history: string[] = []): Promise<Site | null> {
+export async function generateSingleSite(prompt: string, siteName: string, websiteTypes: string[] = [], history: string[] = [], model?: string): Promise<Site | null> {
   try {
     const startedAt = Date.now();
     const isGameSite = websiteTypes.some((type) => type.toLowerCase().includes('game'));
@@ -1016,7 +1029,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     console.log('Step 2.1: Getting site structure...');
     let structureResult: FlowResult<SiteStructure>;
     try {
-      structureResult = await generateSiteStructure({ prompt, language: languageName });
+      structureResult = await generateSiteStructure({ prompt, language: languageName, model });
     } catch (error) {
       console.error('generateSiteStructure failed, using deterministic fallback plan.', error);
       structureResult = createFallbackStructure(siteName, languageName, prompt);
@@ -1097,9 +1110,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     const hasPrivacySection = sectionPlan.some((s) => (s.type || '').toLowerCase().includes('privacy'));
     const showLegalNavFallback = allowLegalInjection && legalSections.length > 0;
     const legalLinks: Array<{ label: string; href: string }> = [];
-    if (hasTermsSection) {
-      legalLinks.push({ label: 'Terms & Conditions', href: 'index.html#terms' });
-    }
+    legalLinks.push({ label: 'Terms & Conditions', href: 'terms.html' });
     legalLinks.push({ label: 'Privacy Policy', href: 'privacy-policy.html' });
 
     let totalInputTokens = structureResult.usage?.inputTokens ?? 0;
@@ -1108,8 +1119,10 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     console.log(`Step 2.2: Generating ${mainSections.length} sections with limited concurrency...`);
     const themeToUse = structure.theme || { primaryColor: "indigo-500", font: "Inter" };
     const usedImagePaths = new Set<string>();
+    // Pick a single site-wide accent to avoid noisy per-section backgrounds
+    const siteAccent = randomChoice(SECTION_ACCENTS);
     const sectionResults: { html: string; model?: string }[] = [];
-    const CHUNK_SIZE = 4;
+    const CHUNK_SIZE = model && model.includes('pro') ? 1 : 4;
     const ctaTarget = isGameSite ? 'game.html' : undefined;
     const sectionIdSet = new Set<string>();
     const navAnchors: SectionNavItem[] = [];
@@ -1120,28 +1133,50 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       const slice = mainSections.slice(i, i + CHUNK_SIZE);
       const generated = await Promise.all(slice.map(async (section, index) => {
         const styleHint = styleHints.length ? styleHints[(i + index) % styleHints.length] : undefined;
-        let randomImageUrl: string | undefined = imagePaths.length > 0 ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
-        if (randomImageUrl) {
-          usedImagePaths.add(randomImageUrl);
+        // Підготуємо набір унікальних зображень для секції (підвищуємо шанс що AI реально вставить їх)
+        let sectionImages: string[] = [];
+        if (imagePaths.length > 0) {
+          const pool = imagePaths.filter((p) => !usedImagePaths.has(p));
+          const take = Math.min(4, Math.max(1, Math.floor(Math.random() * 3) + 1));
+          for (let t = 0; t < take && pool.length; t++) {
+            const pick = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+            if (pick) {
+              sectionImages.push(pick);
+              usedImagePaths.add(pick);
+            }
+          }
+          // Якщо всі вже використані — все одно дати 1-2 випадкових, щоб AI мав що вставити
+          if (!sectionImages.length && imagePaths.length) {
+            const idx = Math.floor(Math.random() * imagePaths.length);
+            sectionImages = [imagePaths[idx]];
+            usedImagePaths.add(imagePaths[idx]);
+          }
         }
         const res = await generateHtmlForSection({
           section,
           sitePrompt: prompt,
           theme: themeToUse,
-          imageUrl: randomImageUrl,
+          imageUrls: sectionImages,
           language: languageName,
           styleHint,
           themeMode: brandTheme.mode,
           ctaTarget,
+          model,
         });
         if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
         if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
-        let cleanHtml = sanitizeSectionHtml(res.htmlContent || '');
+        let cleanHtml = stripEmojis(sanitizeSectionHtml(res.htmlContent || ''));
         if (!cleanHtml) {
           return { html: '', model: res.model };
         }
         if ((section.type || '').toLowerCase() === 'hero') {
           cleanHtml = stripNavLikeBlocks(cleanHtml);
+        }
+        // Якщо AI проігнорував картинки — додамо резервний грід із виданого набору
+        if (sectionImages.length && !/<img\b/i.test(cleanHtml)) {
+          const safeAlt = (section.title || section.type || 'image').toString().slice(0, 60);
+          const imgs = sectionImages.map((src) => `<img src="${src}" alt="${safeAlt}" loading="lazy" />`).join('');
+          cleanHtml += `<div class="wg-img-grid">${imgs}</div>`;
         }
         const baseCandidate = sanitizeIdCandidate(section.type || section.title || `section-${i + index + 1}`) || `section-${i + index + 1}`;
         let candidate = baseCandidate;
@@ -1151,8 +1186,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         }
         sectionIdSet.add(candidate);
 
-        const accentClass = SECTION_ACCENTS[accentCursor % SECTION_ACCENTS.length];
-        accentCursor += 1;
+        const accentClass = siteAccent;
         const shapeChoice = pickSectionShape(section, baseSectionShape, i + index);
         const shapeClass = SECTION_SHAPE_CLASS_MAP[shapeChoice] ?? SECTION_SHAPE_CLASS_MAP.flat;
 
@@ -1256,8 +1290,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
             ? baseCandidate
             : `${baseCandidate || 'legal'}-${sectionResults.length + 1}`;
           sectionIdSet.add(candidate);
-          const accentClass = SECTION_ACCENTS[accentCursor % SECTION_ACCENTS.length];
-          accentCursor += 1;
+          const accentClass = siteAccent;
           const shapeChoice = 'flat';
           const shapeClass = SECTION_SHAPE_CLASS_MAP[shapeChoice];
           if (/^<section\b/i.test(cleanHtml)) {
@@ -1318,7 +1351,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       : 'text-3xl font-bold text-white !mt-12 !mb-4';
     const policyContentHtml = policyResult.sections.map(section => {
       const contentHtml = marked.parse(section.content);
-      return `<section><h2 id="${section.id}" class="${policyHeadingClass}">${section.title}</h2>${contentHtml}</section>`;
+      return stripEmojis(`<section><h2 id="${section.id}" class="${policyHeadingClass}">${section.title}</h2>${contentHtml}</section>`);
     }).join('\n\n');
 
     // --- Step 3: Assemble Final Files Object ---
@@ -1339,15 +1372,17 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         ? `${absoluteHost.replace(/\/$/, '')}/games/${randomGameFolder}/game.html`
         : `games/${randomGameFolder}/game.html`;
 
-      const gamePageContentResult: FlowResult<GamePageContent> = await generateGamePageContent({ siteName: title, language: languageName });
+      const gamePageContentResult: FlowResult<GamePageContent> = await generateGamePageContent({ siteName: title, language: languageName, model });
       if (gamePageContentResult.usage?.inputTokens) totalInputTokens += gamePageContentResult.usage.inputTokens;
       if (gamePageContentResult.usage?.outputTokens) totalOutputTokens += gamePageContentResult.usage.outputTokens;
 
+      const gpTitle = stripEmojis(gamePageContentResult.title || '');
+      const gpDisc = stripEmojis(gamePageContentResult.disclaimerHtml || '');
       files['game.html'] = getGamePageTemplate(
         title,
-        gamePageContentResult.title,
+        gpTitle,
         gameIframePath,
-        gamePageContentResult.disclaimerHtml,
+        gpDisc,
         sortedNavAnchors,
         brandTheme,
         brandVisual,
@@ -1411,6 +1446,20 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         includeLegalNav: showLegalNavFallback,
         legalLinks,
       }
+    );
+    files['terms.html'] = getTermsPageTemplate(
+      title,
+      normalizedDomain,
+      languageName,
+      sortedNavAnchors,
+      brandTheme,
+      brandVisual,
+      websiteTypes,
+      selectedFaviconPath,
+      layoutPrefs.includeHeader,
+      layoutPrefs.includeFooter,
+      selectedLogoAsset?.webPath,
+      baseSectionShape,
     );
     files['scripts/main.js'] = mainJsTemplate;
     files['styles/style.css'] = stylesCssTemplate;

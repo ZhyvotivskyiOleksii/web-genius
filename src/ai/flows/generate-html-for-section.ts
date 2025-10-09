@@ -1,7 +1,7 @@
 // Файл: src/ai/flows/generate-html-for-section.ts
 'use server';
 
-import { ai } from '@/ai/genkit';
+import { ai, getAI } from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
 import { z } from 'zod';
 
@@ -21,6 +21,7 @@ const SectionHtmlInputSchema = z.object({
   language: z.string().optional(),
   themeMode: z.enum(['light', 'dark']).optional(),
   ctaTarget: z.string().optional(),
+  model: z.string().optional(),
 });
 
 const UsageSchema = z.object({
@@ -84,6 +85,10 @@ const sectionPrompt = ai.definePrompt({
 
 - Если используешь иконки, убедись, что они явно видны на фоні: додай контрастні класи (наприклад, text-white або text-slate-900), тіні чи світіння. Кожна карточка/фіча повинна мати власну іконку (Font Awesome, Material Symbols чи емодзі).
 
+// Правила чистого текста и иконок
+- Категорически запрещены эмодзи и любые Unicode‑пиктограммы в тексте и атрибутах. Используй только иконки FA: <i class='fa-solid fa-sparkles'></i>, <i class='fa-solid fa-bolt'></i> и т.п.
+- Не добавляй <script> и инлайновый JS в секции.
+
 **Задание:**
 - Тип секции: \`{{section.type}}\`
 - Заголовок: \`{{section.title}}\`
@@ -100,17 +105,49 @@ export const generateHtmlForSection = ai.defineFlow(
     outputSchema: SectionHtmlFlowOutputSchema,
   },
   async (input) => {
-    const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
+    const localAI = getAI(input.model);
+    const localPrompt = localAI.definePrompt({
+      name: 'sectionHtmlPromptDynamic',
+      input: { schema: SectionHtmlInputSchema },
+      output: { schema: SectionHtmlOutputSchema },
+      prompt: `Ты — элитный фронтенд-разработчик, мастер TailwindCSS. Создай HTML-код для одной секции сайта.
+- НЕ используй \`<html>\`, \`<body>\`, \`<style>\` теги. Только HTML-код для секции.
+- Используй семантические теги (\`<section>\`, \`<h2>\`, и т.д.).
+- Сделай дизайн современным, адаптивным и красивым.
+- Используй акцентный цвет: \`{{theme.primaryColor}}\`.
+- Основывай контент и визуальные мотивы на брифе пользователя: "{{sitePrompt}}". В каждой секции явно упоминай ключевые идеи из этого описания (тематика, география, целевая аудитория, особенности сервиса).
+- Учитывай режим темы: если \`{{themeMode}}\` = 'light', применяй светлые фоны и тёмный текст; если 'dark' — наоборот, оставляй глубокие тёмные фоны и светлый текст.
+- Тримай фон секції нейтральним: не використовуй класи Tailwind \`bg-gradient-*\`, \`from-*\`, \`via-*\`, \`to-*\` і не додавай інлайнові градієнти чи кислотні заливки.
+- Основний текст не роби напівпрозорим: жодних \`opacity-*\` для абзаців чи заголовків, щоб контраст залишався високим.
+- Якщо тип секції 'hero', створи компактний рядок над заголовком з класом \`headline-kicker\`, а головний заголовок оформи як \`<h1 class="hero-headline">...\`. Щонайменше одне слово обгорни у \`<span class="headline-highlight">...</span>\` для акценту. Текст заголовка має бути uppercase.
+- **ВАЖНО: Главному тегу <section> ОБЯЗАТЕЛЬНО добавь id, равный типу секции. Пример: \`<section id="{{section.type}}">\`.**
+- **Если тип секции 'hero', сделай её полноэкранной, добавив классы \`min-h-screen flex flex-col justify-center\`**.
+- **Пиши весь текст секции строго на языке {{#if language}}{{language}}{{else}}пользовательского запроса{{/if}} (заголовки, кнопки, описи).**
+- **Никогда не генерируй собственные теги header, nav, footer или глобальные меню внутри секции — эти блоки уже есть в макете.**
+- **Все кнопки и CTA делай ссылками с реальным адресом (никаких пустых или заглушек в href).**
+{{#if ctaTarget}}- **Главный CTA (первый по смыслу) обязательно использует href="{{ctaTarget}}". Не оставляй \`href=\"#\"\`, не подменяй адрес внешними ссылками.**{{/if}}
+- Для кнопок и основних лінків використовуй заготовлені класи: головний CTA — \`btn-primary\`, додаткові дії — \`btn-secondary\`.
+- Не додавай до них класів виду \`text-*\` чи inline-стилів кольору — контраст залишаємо типовий.
+- Це соціальна демо‑платформа без реальних ставок і виграшів.
+
+**Задание:**
+- Тип секции: \`{{section.type}}\`
+- Заголовок: \`{{section.title}}\`
+- Детали: \`{{section.details}}\` 
+
+Выдай только HTML-код в поле "htmlContent" JSON-ответа.`,
+    });
+    const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
     let lastErr: any = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
-        const response = await sectionPrompt(input);
+        const response = await localPrompt(input);
         const output = response.output;
         if (output?.htmlContent) {
           return {
             ...output,
             usage: response.usage || undefined,
-            model: response.model || MODEL_NAME,
+            model: response.model || (input.model ?? MODEL_NAME),
           };
         }
         throw new Error('Empty model output');

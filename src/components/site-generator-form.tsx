@@ -55,6 +55,7 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
   const [prompt, setPrompt] = useState('');
   const [enhanceState, enhanceFormAction, isEnhancing] = useActionState<EnhanceState, FormData>(enhancePromptAction, initialEnhanceState);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [model, setModel] = useState<string>('googleai/gemini-2.5-flash');
 
   const typeOptions = [
     { id: 'game', label: 'Social Casino Game', value: 'Game' },
@@ -92,6 +93,16 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
     setSelectedType(initialType ?? null);
   }, [state.site?.types]);
 
+  useEffect(() => {
+    // hydrate model from localStorage or use current server model
+    try {
+      const saved = window.localStorage.getItem('wg-model');
+      setModel(saved || modelName || 'googleai/gemini-2.5-flash');
+    } catch {
+      setModel(modelName || 'googleai/gemini-2.5-flash');
+    }
+  }, [modelName]);
+
   return (
     <div className="w-full max-w-2xl">
       <Card className="w-full shadow-2xl backdrop-blur-lg bg-black/40 border border-white/10">
@@ -110,15 +121,17 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
           <CardDescription className="font-body text-lg">
             Generate a unique, responsive website from a single prompt.
           </CardDescription>
-          <p className="text-xs text-muted-foreground mt-2">Model: {modelName}</p>
+          <p className="text-xs text-muted-foreground mt-2">Model (current): {model}</p>
         </CardHeader>
         <CardContent>
           <form action={formAction} className="space-y-8" onSubmit={(e) => {
             const data = new FormData(e.currentTarget);
             const name = String(data.get('siteName') || '').trim();
             if (onStartGenerating) onStartGenerating(name || prompt || '');
+            try { window.localStorage.setItem('wg-model', model); } catch {}
           }}>
             <input type="hidden" name="history" value={JSON.stringify(state.site?.history || [])} />
+            <input type="hidden" name="model" value={model} />
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="siteName" className="text-base">Site Name</Label>
@@ -167,6 +180,16 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
                  </div>
               </div>
               
+              <div className="space-y-2">
+                <Label className="text-base">AI Model</Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setModel('googleai/gemini-2.5-flash')}
+                    className={cn('rounded-lg px-3 py-2 border text-sm', model === 'googleai/gemini-2.5-flash' ? 'border-primary text-white bg-primary/30' : 'border-white/10 text-white/80 bg-white/5')}>2.5 Flash</button>
+                  <button type="button" onClick={() => setModel('googleai/gemini-2.5-pro')}
+                    className={cn('rounded-lg px-3 py-2 border text-sm', model === 'googleai/gemini-2.5-pro' ? 'border-primary text-white bg-primary/30' : 'border-white/10 text-white/80 bg-white/5')}>2.5 Pro</button>
+                </div>
+              </div>
+
                <div className="space-y-3 pt-2">
                 <Label className="text-base">Website Type (Optional)</Label>
                 <input type="hidden" name="websiteTypes" value={selectedType ?? ''} disabled={!selectedType} />

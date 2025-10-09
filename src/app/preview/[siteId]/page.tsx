@@ -346,7 +346,7 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
     <iframe
       title="Live Preview"
       style={{ border: 0, width: '100vw', height: '100vh' }}
-      sandbox="allow-scripts allow-same-origin allow-pointer-lock"
+      sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-popups allow-forms"
       srcDoc={html}
     />
   );

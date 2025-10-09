@@ -417,6 +417,7 @@ const formSchema = z.object({
   prompt: z.string().min(10, 'Prompt must be at least 10 characters long.'),
   websiteTypes: z.array(z.string()).optional(),
   history: z.array(z.string()).optional(), // Add history to schema
+  model: z.string().optional(),
 });
 
 export async function generateWebsiteAction(prevState: any, formData: FormData) {
@@ -440,10 +441,10 @@ export async function generateWebsiteAction(prevState: any, formData: FormData) 
       };
     }
 
-    const { siteName, prompt, websiteTypes, history: prevHistory } = validatedFields.data;
+    const { siteName, prompt, websiteTypes, history: prevHistory, model } = validatedFields.data;
 
     console.time('generate:full-site');
-    const site = await generateSingleSite(prompt, siteName, websiteTypes, prevHistory);
+    const site = await generateSingleSite(prompt, siteName, websiteTypes, prevHistory, model);
     console.timeEnd('generate:full-site');
     
     if (!site) {
@@ -629,6 +630,7 @@ const editCodeSchema = z.object({
   prompt: z.string(),
   userId: z.string().min(1),
   siteId: z.string().min(1),
+  model: z.string().optional(),
 });
 
 const editElementSchema = z.object({
@@ -643,6 +645,7 @@ const editElementSchema = z.object({
   tagName: z.string().optional().nullable(),
   path: z.string().optional().nullable(),
   siteTypes: z.string().optional().nullable(),
+  model: z.string().optional(),
 });
 
 export async function editCodeAction(prevState: any, formData: FormData) {
@@ -652,6 +655,7 @@ export async function editCodeAction(prevState: any, formData: FormData) {
     prompt: formData.get('prompt'),
     userId: formData.get('userId'),
     siteId: formData.get('siteId'),
+    model: formData.get('model') || undefined,
   });
 
   if (!validatedFields.success) {
@@ -663,11 +667,11 @@ export async function editCodeAction(prevState: any, formData: FormData) {
     };
   }
 
-  const { fileName, code, prompt, userId, siteId } = validatedFields.data;
+  const { fileName, code, prompt, userId, siteId, model } = validatedFields.data;
 
   try {
     const sb = await getSbService();
-    const result = await editCodeFlow({ fileName, code, prompt });
+    const result = await editCodeFlow({ fileName, code, prompt, model });
     let chatEntry: any = null;
     const aiResponseText = result.reasoning;
     if (aiResponseText) {
@@ -732,6 +736,7 @@ export async function editElementAction(prevState: any, formData: FormData) {
     tagName: formData.get('tagName'),
     path: formData.get('path'),
     siteTypes: formData.get('siteTypes'),
+    model: formData.get('model') || undefined,
   });
 
   if (!validatedFields.success) {
@@ -755,6 +760,7 @@ export async function editElementAction(prevState: any, formData: FormData) {
     tagName,
     path,
     siteTypes,
+    model,
   } = validatedFields.data;
 
   let parsedSiteTypes: string[] = [];
@@ -782,6 +788,7 @@ export async function editElementAction(prevState: any, formData: FormData) {
         elementHtml,
         prompt,
         css: cssContent || undefined,
+        model: model || undefined,
       });
     }
 

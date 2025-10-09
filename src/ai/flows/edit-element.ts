@@ -1,6 +1,6 @@
 'use server';
 
-import { ai } from '@/ai/genkit';
+import { ai, getAI } from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
 import { z } from 'zod';
 
@@ -8,6 +8,7 @@ const EditElementInputSchema = z.object({
   elementHtml: z.string().describe('Current HTML markup of the selected element.'),
   prompt: z.string().describe('Instructions describing how to update the element.'),
   css: z.string().optional().describe('The complete contents of the shared CSS file.'),
+  model: z.string().optional(),
 });
 
 const UsageSchema = z.object({
@@ -65,12 +66,14 @@ export const editElementFlow = ai.defineFlow(
     outputSchema: EditElementFlowOutputSchema,
   },
   async (input) => {
-    const response = await editElementPrompt(input);
+    const localAI = getAI(input.model);
+    const localPrompt = localAI.definePrompt({ name: 'editElementPromptDynamic', input: { schema: EditElementInputSchema }, output: { schema: EditElementPromptOutputSchema }, prompt: (editElementPrompt as any).prompt });
+    const response = await localPrompt(input);
     const output = response.output!;
     return {
       ...output,
       usage: response.usage || undefined,
-      model: response.model || MODEL_NAME,
+      model: response.model || (input.model ?? MODEL_NAME),
     };
   },
 );

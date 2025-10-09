@@ -461,6 +461,7 @@ function buildNavItems(
       label = 'Terms';
       type = 'legal';
       termsAdded = true;
+      href = 'terms.html';
     }
     if (isPrivacyAnchor) {
       label = 'Privacy Policy';
@@ -476,8 +477,7 @@ function buildNavItems(
     sectionCount += 1;
   }
   if (includeLegalFallback && !termsAdded) {
-    const href = currentPage === 'index' ? '#terms' : 'index.html#terms';
-    items.push({ href, label: 'Terms', type: 'legal' });
+    items.push({ href: 'terms.html', label: 'Terms', type: 'legal' });
   }
   if (includeLegalFallback && !privacyAdded) {
     items.push({ href: 'privacy-policy.html', label: 'Privacy Policy', active: currentPage === 'policy', type: 'legal' });
@@ -776,7 +776,7 @@ function renderCookieBanner(theme: BrandingTheme): string {
         </div>
         <div class="flex items-center gap-3">
           <button id="accept-cookies" class="${theme.cookieButtonClass}">Accept</button>
-          <a href="privacy-policy.html" class="text-xs sm:text-sm hover:text-white/80">Cookie policy</a>
+          <a href="privacy-policy.html" class="text-xs sm:text-sm ${theme.mode === 'light' ? 'text-slate-600 hover:text-slate-900' : 'text-slate-200 hover:text-white'}">Cookie policy</a>
         </div>
       </div>
     </div>
@@ -864,7 +864,7 @@ const gamePageVariants: GamePageVariant[] = [
   },
   {
     badge: 'Playable Concept',
-    subtitle: 'This sandbox simulates core mechanics, transitions, and monetization hooks.',
+    subtitle: 'This sandbox simulates core mechanics, transitions, and telemetry hooks.',
     bulletList: ['Audio-ready environment', 'Supports keyboard + gamepad', 'Built for rapid iteration'],
     ctaLabel: 'Play Immersive Mode',
     ctaIcon: 'fa-solid fa-vr-cardboard',
@@ -873,7 +873,7 @@ const gamePageVariants: GamePageVariant[] = [
   {
     badge: 'Experience Preview',
     subtitle: 'See the cinematic entry, interactive HUD, and responsible play overlays in action.',
-    bulletList: ['Particle-rich transitions', 'Session-safe overlays', 'Configurable bonus timers'],
+    bulletList: ['Particle-rich transitions', 'Session-safe overlays', 'Configurable session timers'],
     ctaLabel: 'Enter Demo Arena',
     ctaIcon: 'fa-solid fa-play-circle',
   },
@@ -1107,6 +1107,110 @@ export const getPrivacyPolicyTemplate = (
 </html>`;
 };
 
+export const getTermsPageTemplate = (
+  title: string,
+  domain: string,
+  language?: string,
+  sectionAnchors: SectionNavItem[] = [],
+  theme?: BrandingTheme,
+  brandVisual?: BrandVisual,
+  websiteTypes: string[] = [],
+  faviconPath?: string,
+  includeHeader: boolean = true,
+  includeFooter: boolean = true,
+  logoAssetPath?: string,
+  sectionShape: string = 'flat',
+) => {
+  const appliedTheme = resolveTheme(theme);
+  const brandGlyph = resolveBrandVisual(brandVisual);
+  const fontHref = resolveFontHref(websiteTypes);
+  const hasGame = isGameContext(websiteTypes);
+  const faviconTag = faviconPath
+    ? `<link rel="icon" type="image/png" href="${faviconPath}">`
+    : '';
+  const headingClass = appliedTheme.mode === 'light' ? 'text-[#1f2440]' : 'text-white';
+  const textClass = appliedTheme.mode === 'light' ? 'text-[#3b456a]' : 'text-gray-200/90';
+  const borderClass = appliedTheme.mode === 'light' ? 'border-[#dbe2ff] bg-white/95' : 'border-white/10 bg-white/5 backdrop-blur';
+  const t = (en: string, uk?: string, pl?: string) => {
+    const l = (language || '').toLowerCase();
+    if (l.startsWith('uk')) return uk || en;
+    if (l.startsWith('pl')) return pl || en;
+    return en;
+  };
+  const content = `
+  <section class="rounded-2xl border ${borderClass} p-6">
+    <h1 class="${headingClass} text-3xl sm:text-4xl font-bold mb-4">${t('Terms & Conditions','Умови користування','Regulamin')}</h1>
+    <p class="${textClass} mb-4">${t(
+      `Welcome to ${escapeHtmlText(title)}. By using this site, you agree to these Terms & Conditions. If you do not agree, please discontinue use.`,
+      `Ласкаво просимо до ${escapeHtmlText(title)}. Користуючись сайтом, ви погоджуєтеся з цими Умовами. Якщо не погоджуєтеся — припиніть використання.`,
+      `Witamy w ${escapeHtmlText(title)}. Korzystając z serwisu, akceptujesz niniejszy Regulamin. W przypadku braku zgody, zaprzestań korzystania.`
+    )}</p>
+    <h2 class="${headingClass} text-2xl font-semibold mt-8 mb-2">${t('Use of the Site','Використання сайту','Korzystanie z serwisu')}</h2>
+    <p class="${textClass}">${t(
+      'This site is provided for entertainment and demonstration purposes. No real-money wagering is available. You agree not to misuse the site or attempt to disrupt its operation.',
+      'Сайт надається для розваги та демонстраційних цілей. Реальних ставок немає. Ви погоджуєтеся не зловживати сайтом і не перешкоджати його роботі.',
+      'Serwis służy rozrywce i celom demonstracyjnym. Brak prawdziwych zakładów. Zobowiązujesz się nie nadużywać serwisu ani nie zakłócać jego działania.'
+    )}</p>
+    <h2 class="${headingClass} text-2xl font-semibold mt-8 mb-2">${t('Eligibility','Вікові обмеження','Wiek i dostęp')}</h2>
+    <p class="${textClass}">${t(
+      'You must be at least 18 years old (or the age of majority in your jurisdiction) to access the content. Responsible enjoyment is encouraged.',
+      'Вам має бути щонайменше 18 років (або повноліття у вашій юрисдикції). Рекомендуємо відповідальну розвагу.',
+      'Musisz mieć co najmniej 18 lat (lub wiek pełnoletności w swojej jurysdykcji). Zachęcamy do odpowiedzialnej rozrywki.'
+    )}</p>
+    <h2 class="${headingClass} text-2xl font-semibold mt-8 mb-2">${t('Content & Intellectual Property','Контент і права інтелектуальної власності','Treści i prawa autorskie')}</h2>
+    <p class="${textClass}">${t(
+      'All content, trademarks, and assets are owned by their respective owners. You may not copy, distribute, or modify without permission.',
+      'Увесь контент, торговельні марки та активи належать їхнім власникам. Копіювання, розповсюдження або зміни без дозволу заборонені.',
+      'Wszelkie treści, znaki towarowe i zasoby należą do właścicieli. Nie wolno kopiować, rozpowszechniać ani modyfikować bez zgody.'
+    )}</p>
+    <h2 class="${headingClass} text-2xl font-semibold mt-8 mb-2">${t('Disclaimer','Відмова від відповідальності','Zastrzeżenia')}</h2>
+    <p class="${textClass}">${t(
+      'The site is provided “as is” without warranties. We do not guarantee uninterrupted availability or error-free operation.',
+      'Сайт надається «як є» без гарантій. Ми не гарантуємо безперервну доступність чи роботу без помилок.',
+      'Serwis udostępniany jest „tak jak jest”, bez gwarancji. Nie gwarantujemy nieprzerwanej dostępności ani pracy bez błędów.'
+    )}</p>
+    <h2 class="${headingClass} text-2xl font-semibold mt-8 mb-2">${t('Changes','Зміни','Zmiany')}</h2>
+    <p class="${textClass}">${t(
+      'We may update these Terms & Conditions from time to time. Continued use of the site indicates acceptance of the updated terms.',
+      'Ми можемо час від часу оновлювати ці Умови. Подальше користування сайтом означає згоду з оновленою редакцією.',
+      'Warunki mogą być okresowo aktualizowane. Dalsze korzystanie oznacza akceptację zmian.'
+    )}</p>
+    <h2 class="${headingClass} text-2xl font-semibold mt-8 mb-2">${t('Contact','Контакти','Kontakt')}</h2>
+    <p class="${textClass}">${t(
+      `Questions? Email us at <a href="mailto:contact@${escapeHtmlAttribute(domain)}" class="underline">contact@${escapeHtmlText(domain)}</a>.`,
+      `Питання? Напишіть нам: <a href="mailto:contact@${escapeHtmlAttribute(domain)}" class="underline">contact@${escapeHtmlText(domain)}</a>.`,
+      `Pytania? Napisz: <a href="mailto:contact@${escapeHtmlAttribute(domain)}" class="underline">contact@${escapeHtmlText(domain)}</a>.`
+    )}</p>
+  </section>`;
+  return `
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terms & Conditions - ${title}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="${fontHref}" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@2.1.1/src/regular/style.css">
+  <link rel="stylesheet" href="styles/style.css">
+  ${faviconTag}
+  <style>
+    ${appliedTheme.styleBlock}
+  </style>
+</head>
+<body class="${appliedTheme.bodyClass}" data-theme-mode="${appliedTheme.mode}" data-theme-id="${appliedTheme.id}" data-has-game="${hasGame ? 'true' : 'false'}" data-page="policy" data-section-shape="${sectionShape}">
+  ${renderHeader(title, appliedTheme, websiteTypes, brandGlyph, 'policy', sectionAnchors, logoAssetPath, { includeLegalFallback: true })}
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+    ${content}
+  </div>
+  ${renderFooter(title, appliedTheme, { legalLinks: [{ label: 'Privacy Policy', href: 'privacy-policy.html' }] })}
+  ${renderCookieBanner(appliedTheme)}
+  <script src="scripts/main.js"></script>
+</body>
+</html>`;
+};
+
 // ... (mainJsTemplate та stylesCssTemplate залишаються без змін) ...
 export const mainJsTemplate = `
 document.addEventListener('DOMContentLoaded', function () {
@@ -1286,6 +1390,71 @@ document.addEventListener('DOMContentLoaded', function () {
             header.classList.toggle('shadow-lg', window.scrollY > 10);
         });
     }
+
+    // --- Animation presets (hero + section headings) ---
+    try {
+        // Choose one of three hero presets per site load
+        var heroPreset = (function(){ try { return (localStorage.getItem('wg-hero-preset') || ''); } catch { return ''; } })();
+        if (!heroPreset) {
+            var options = ['a','b','c'];
+            heroPreset = options[Math.floor(Math.random()*options.length)];
+            try { localStorage.setItem('wg-hero-preset', heroPreset); } catch {}
+        }
+        document.documentElement.classList.add('hero-anim-preset-' + heroPreset);
+
+        // Split hero headline into spans if not already (to avoid relying on model)
+        var hero = document.querySelector('.hero-headline');
+        if (hero && hero.children.length === 0) {
+            var txt = hero.textContent || '';
+            hero.textContent = '';
+            txt.split(/(\s+)/).forEach(function(token){
+                var span = document.createElement('span');
+                span.textContent = token;
+                hero.appendChild(span);
+            });
+        }
+
+        // Animate hero headline tokens
+        var tokens = hero ? Array.from(hero.querySelectorAll('span')) : [];
+        var useGsap = typeof window.gsap !== 'undefined';
+        if (tokens.length) {
+            if (useGsap) {
+                var stagger = 0.06;
+                var from = { opacity: 0, y: 18 };
+                if (heroPreset === 'b') from = { opacity: 0, x: -14, rotation: -2 };
+                if (heroPreset === 'c') from = { opacity: 0, scale: 0.96, filter: 'blur(3px)' };
+                window.gsap.from(tokens, { ...from, duration: 0.9, ease: 'power3.out', stagger });
+            } else {
+                // CSS fallback
+                var delay = 0;
+                tokens.forEach(function(el){
+                    el.style.transition = 'all 650ms cubic-bezier(0.22,1,0.36,1)';
+                    el.style.transitionDelay = (delay += 35) + 'ms';
+                    requestAnimationFrame(function(){ el.style.opacity = '1'; el.style.transform = 'none'; el.style.filter = 'none'; });
+                });
+            }
+        }
+
+        // Animate section headings on appear across the site
+        var headings = Array.from(document.querySelectorAll('section.generated-section h1, section.generated-section h2, section.generated-section h3'));
+        headings.forEach(function(h){ h.classList.add('wg-heading'); });
+        if (useGsap && window.ScrollTrigger) {
+            window.gsap.registerPlugin(window.ScrollTrigger);
+            headings.forEach(function(h){
+                window.gsap.fromTo(h, { opacity: 0, y: 16 }, {
+                    opacity: 1, y: 0, duration: 0.7, ease: 'power3.out',
+                    scrollTrigger: { trigger: h, start: 'top 80%', toggleActions: 'play none none none' }
+                });
+            });
+        } else {
+            var io = new IntersectionObserver(function(entries){
+                entries.forEach(function(entry){ if (entry.isIntersecting) { entry.target.classList.add('wg-in'); io.unobserve(entry.target); } });
+            }, { root: null, rootMargin: '0px 0px -20% 0px', threshold: 0.1 });
+            headings.forEach(function(h){ io.observe(h); });
+        }
+    } catch (animErr) {
+        // best-effort animations; ignore errors
+    }
     
     // --- Logic for Policy Page Navigation ---
     const policyNav = document.getElementById('policy-nav');
@@ -1352,40 +1521,17 @@ body {
     font-family: var(--body-font, 'Inter', sans-serif);
 }
 
-section.generated-section.shape-flat {
-    --section-radius: 0rem;
-    --section-radius-mobile: 0rem;
-    --section-image-radius: 0rem;
-    --section-shadow: 0 14px 32px rgba(7, 12, 24, 0.18);
-    --btn-radius: 0.4rem;
-}
-
-section.generated-section.shape-soft {
-    --section-radius: clamp(1.6rem, 3.5vw, 2.6rem);
-    --section-radius-mobile: calc(var(--section-radius) * 0.7);
-    --section-image-radius: calc(var(--section-radius) - 0.6rem);
-    --section-padding-y: clamp(2.4rem, 5.8vw, 4.2rem);
-    --section-shadow: 0 24px 58px rgba(7, 12, 28, 0.32);
-    --btn-radius: 1.65rem;
-}
-
-section.generated-section.shape-sleek {
-    --section-radius: clamp(1.2rem, 3vw, 2.1rem);
-    --section-radius-mobile: calc(var(--section-radius) * 0.75);
-    --section-image-radius: calc(var(--section-radius) - 0.45rem);
-    --section-shadow: 0 22px 52px rgba(6, 10, 26, 0.3);
-    --btn-radius: 1.1rem;
-}
-
+/* Уніфікуємо форму: без скруглень і зайвих тіней для всіх варіантів */
+section.generated-section.shape-flat,
+section.generated-section.shape-soft,
+section.generated-section.shape-sleek,
 section.generated-section.shape-angular {
     --section-radius: 0rem;
     --section-radius-mobile: 0rem;
-    --section-image-radius: 0rem;
-    --section-padding-y: clamp(2rem, 4.6vw, 3.3rem);
-    --section-padding-x: clamp(1.45rem, 4vw, 2.85rem);
-    --section-shadow: 0 18px 42px rgba(6, 10, 24, 0.28);
-    --section-border-width: 1.4px;
-    --btn-radius: 0.25rem;
+    --section-image-radius: 0.25rem;
+    --section-shadow: none;
+    --section-border-width: 0px;
+    --btn-radius: 0.5rem;
 }
 
 body.overflow-hidden { overflow: hidden; }
@@ -1466,10 +1612,10 @@ section.generated-section {
     position: relative;
     margin: clamp(1.25rem, 4vw, 3rem) auto;
     padding: var(--section-padding-y) var(--section-padding-x);
-    border-radius: var(--section-radius);
-    background: var(--section-surface, rgba(17, 24, 39, 0.86));
-    border: var(--section-border-width, 1px) solid var(--section-border, rgba(148, 163, 184, 0.12));
-    box-shadow: var(--section-shadow, 0 22px 60px rgba(8, 12, 24, 0.32));
+    border-radius: 0; /* Преміум: без скруглень */
+    background: transparent; /* секції зливаються з фоном сторінки */
+    border: 0; /* без виділення бордерами */
+    box-shadow: none; /* без великих тіней */
     color: inherit;
     overflow: hidden;
     backdrop-filter: blur(var(--section-blur, 16px));
@@ -1479,41 +1625,39 @@ section.generated-section::before {
     content: '';
     position: absolute;
     inset: 0;
-    border-radius: inherit;
-    background: var(--section-overlay, transparent);
-    opacity: var(--section-overlay-opacity, 0);
-    mix-blend-mode: var(--section-overlay-blend, normal);
+    border-radius: 0;
+    background: transparent; /* прибираємо декоративну плівку, щоб не знижувати контраст тексту */
+    opacity: 0;
+    mix-blend-mode: normal;
     pointer-events: none;
-    transition: opacity 0.35s ease;
+    transition: opacity 0.2s ease;
     background-size: var(--section-overlay-size, cover);
     background-position: center;
 }
-section.generated-section:hover::before {
-    opacity: calc(var(--section-overlay-opacity, 0) * 1.05);
-}
+/* без затемнення контенту при ховері */
 
 body[data-theme-mode="dark"] section.generated-section {
-    --section-surface: rgba(15, 23, 42, 0.88);
-    --section-border: rgba(94, 105, 140, 0.24);
-    --section-shadow: 0 24px 64px rgba(7, 12, 28, 0.45);
-    color: rgba(233, 239, 255, 0.92);
+    --section-surface: transparent;
+    --section-border: transparent;
+    --section-shadow: none;
+    color: rgba(233, 239, 255, 0.96);
 }
 
 body[data-theme-mode="light"] section.generated-section {
-    --section-surface: rgba(255, 255, 255, 0.94);
-    --section-border: rgba(203, 213, 225, 0.7);
-    --section-shadow: 0 18px 40px rgba(148, 163, 184, 0.22);
-    color: #1f2937;
+    --section-surface: transparent;
+    --section-border: transparent;
+    --section-shadow: none;
+    color: #0f172a;
 }
 
 .section-accent-aurora {
     --section-overlay: radial-gradient(circle at top left, rgba(120, 255, 214, 0.35), transparent 60%);
-    --section-overlay-opacity: 1;
+    --section-overlay-opacity: 0.6;
 }
 
 .section-accent-wave {
     --section-overlay: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(236, 72, 153, 0.14));
-    --section-overlay-opacity: 1;
+    --section-overlay-opacity: 0.6;
 }
 
 .section-accent-grid {
@@ -1526,12 +1670,12 @@ body[data-theme-mode="light"] section.generated-section {
 
 .section-accent-noise {
     --section-overlay: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 200 200"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="1" numOctaves="4" stitchTiles="stitch"/></filter><rect width="200" height="200" filter="url(#n)" opacity="0.18"/></svg>');
-    --section-overlay-opacity: 1;
+    --section-overlay-opacity: 0.6;
 }
 
 .section-accent-lens {
     --section-overlay: radial-gradient(circle at center, rgba(255,255,255,0.18), transparent 72%);
-    --section-overlay-opacity: 1;
+    --section-overlay-opacity: 0.6;
 }
 
 body[data-theme-mode="light"] .section-accent-grid {
@@ -1552,11 +1696,11 @@ section.generated-section :where(h1, h2, h3, h4) {
 section.generated-section :where(p) {
     line-height: 1.7;
     margin-bottom: 1.1em;
-    opacity: 0.92;
+    opacity: 1;
 }
 
 body[data-theme-mode="light"] section.generated-section :where(p) {
-    color: rgba(55, 65, 81, 0.9);
+    color: rgba(30, 41, 59, 0.95);
 }
 
 section.generated-section :where(a) {
@@ -1571,14 +1715,20 @@ body[data-theme-mode="light"] section.generated-section :where(a) {
     color: #2563eb;
 }
 
+/* Reviews avatars: круглі мініатюри */
+section#reviews img { width: 56px; height: 56px; border-radius: 9999px; object-fit: cover; }
+
+/* Games/Gallery: сіткові прев’ю з обрізкою */
+section#games img, section#gallery img { width: 100%; height: 220px; object-fit: cover; border-radius: 0.5rem; }
+
 section.generated-section :where(img) {
     display: block;
-    width: min(520px, 100%);
-    max-height: clamp(220px, 45vh, 520px);
+    width: 100%;
+    height: auto;
     object-fit: cover;
-    border-radius: var(--section-image-radius, calc(var(--section-radius) - 0.4rem));
-    margin: clamp(1.1rem, 3.2vw, 2.35rem) auto;
-    box-shadow: 0 18px 45px rgba(12, 18, 35, 0.25);
+    border-radius: var(--section-image-radius, 0.25rem);
+    margin: 1rem 0;
+    box-shadow: none;
 }
 
 body[data-theme-mode="light"] section.generated-section :where(img) {
@@ -1618,9 +1768,9 @@ section.generated-section :where(figcaption) {
 .hero-headline {
     font-family: var(--heading-font, 'Space Grotesk', 'Inter', sans-serif);
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    text-shadow: var(--hero-glow);
-    animation: heroHeadlineGlow 9s ease-in-out infinite;
+    letter-spacing: 0.08em;
+    text-shadow: 0 8px 18px rgba(0,0,0,0.18);
+    animation: heroHeadlineGlow 6s ease-in-out infinite;
 }
 
 .hero-headline span {
@@ -1668,6 +1818,13 @@ section.generated-section :where(figcaption) {
     }
 }
 
+.hero-anim-preset-a .hero-headline span { opacity: 0; transform: translateY(18px); }
+.hero-anim-preset-b .hero-headline span { opacity: 0; transform: translateX(-14px) rotate(-2deg); }
+.hero-anim-preset-c .hero-headline span { opacity: 0; transform: scale(0.96); filter: blur(3px); }
+
+.wg-heading { opacity: 0; transform: translateY(16px); transition: opacity 600ms ease, transform 650ms cubic-bezier(0.22,1,0.36,1), filter 600ms ease; will-change: opacity, transform, filter; }
+.wg-heading.wg-in { opacity: 1; transform: none; filter: none; }
+
 .icon-badge {
     display: inline-flex;
     align-items: center;
@@ -1687,6 +1844,10 @@ section.generated-section :where(figcaption) {
     font-size: 1.3rem;
     line-height: 1;
 }
+
+/* Простий грід, якщо AI не додав верстку для картинок */
+.wg-img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px; margin-top: 16px; }
+.wg-img-grid img { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; }
 
 section.generated-section :where(i.fa-solid, i.fa-regular) {
     vertical-align: middle;

@@ -527,7 +527,15 @@ export function SitePreview({
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [projectsDeleteTarget, setProjectsDeleteTarget] = useState<ProjectRecord | null>(null);
   const [projectsDeletePending, setProjectsDeletePending] = useState(false);
-  
+  const [editorModel, setEditorModel] = useState<string>('googleai/gemini-2.5-flash');
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('wg-model');
+      if (saved) setEditorModel(saved);
+    } catch {}
+  }, []);
+
 
   const suggestedDomain = useMemo(() => {
     const selectedTypes = ((site as any).types as string[]) || [];
@@ -1420,7 +1428,7 @@ export function SitePreview({
         const extras = {
           inputTokens: usage?.inputTokens,
           outputTokens: usage?.outputTokens,
-          model: model as string | undefined,
+          model: ((): string | undefined => { try { return window.localStorage.getItem('wg-model') || undefined; } catch { return undefined; } })(),
           metadata: {
             diff: { added, removed },
             elementHtml,
@@ -1581,7 +1589,9 @@ export function SitePreview({
       // ensure project is persisted before saving chat
       const ok = await ensureProjectId();
       if (!ok) { toast({ variant: 'destructive', title: 'Not saved', description: 'Sign in required' }); return; }
-      const saved = await persistChat('user', chatPrompt, activeFile);
+      let chosenModel: string | undefined;
+      try { chosenModel = window.localStorage.getItem('wg-model') || undefined; } catch {}
+      const saved = await persistChat('user', chatPrompt, activeFile, { model: chosenModel });
       const createdAt = (saved as any)?.created_at || new Date().toISOString();
       const userMessageId = generateMessageId();
       const placeholderId = generateMessageId();
@@ -3026,6 +3036,7 @@ export function SitePreview({
               <input type="hidden" name="userId" value={userId || ''} />
               <input type="hidden" name="siteId" value={siteId || ''} />
               <input type="hidden" name="siteTypes" value={serializedSiteTypes} />
+              <input type="hidden" name="model" value={editorModel} />
               <div className="flex items-center justify-end gap-2">
                 <Button
                   type="button"
@@ -3343,6 +3354,17 @@ export function SitePreview({
         </Button>
         <h1 className="text-lg font-bold truncate px-4">{displayName}</h1>
         <div className="flex items-center gap-2">
+          {/* Model toggle (Flash/Pro) in editor header */}
+          <div className="hidden sm:flex items-center gap-1 rounded-full bg-[#24262c] border border-white/5 p-1 h-9">
+            <button
+              className={`px-3 py-1 text-xs rounded-full ${editorModel === 'googleai/gemini-2.5-flash' ? 'bg-white text-slate-900' : 'text-white/80 hover:text-white'}`}
+              onClick={() => { setEditorModel('googleai/gemini-2.5-flash'); try { window.localStorage.setItem('wg-model','googleai/gemini-2.5-flash'); } catch {} }}
+            >2.5 Flash</button>
+            <button
+              className={`px-3 py-1 text-xs rounded-full ${editorModel === 'googleai/gemini-2.5-pro' ? 'bg-white text-slate-900' : 'text-white/80 hover:text-white'}`}
+              onClick={() => { setEditorModel('googleai/gemini-2.5-pro'); try { window.localStorage.setItem('wg-model','googleai/gemini-2.5-pro'); } catch {} }}
+            >2.5 Pro</button>
+          </div>
           {/* Icon pills (style like in example) */}
           <TooltipProvider>
             <Tooltip>
@@ -3885,7 +3907,7 @@ export function SitePreview({
                   Analyze whole project
                 </Label>
               </div>
-               <form
+              <form
                 action={wholeSiteScope ? bulkFormAction : editCodeFormAction}
                 onSubmit={(e) => {
                   const formData = new FormData(e.currentTarget);
@@ -3949,6 +3971,7 @@ export function SitePreview({
                     name="code"
                     value={(site.files[activeEditorTab] as string) || ''}
                   />
+                  <input type="hidden" name="model" value={editorModel} />
                   <input type="hidden" name="userId" value={userId || ''} />
                   <input type="hidden" name="siteId" value={siteId || ''} />
                   <Button
