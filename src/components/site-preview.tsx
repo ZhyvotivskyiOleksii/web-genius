@@ -692,8 +692,9 @@ export function SitePreview({
         }
         if (!id) throw new Error('Failed to create site');
         setSiteId(id);
-        // Bulk upsert initial files
-        const rows = Object.entries(site.files).map(([path, content]) => ({
+        // Bulk upsert initial files (encode binaries as data:URL)
+        const serialized = serializeFilesForTransfer(site.files as any);
+        const rows = Object.entries(serialized).map(([path, content]) => ({
           site_id: id,
           path,
           content: String(content || ''),
@@ -2397,6 +2398,9 @@ export function SitePreview({
       let processedHtml = htmlContent;
 
       try {
+        const baseOrigin = (typeof window !== 'undefined' && window.location && window.location.origin)
+          ? window.location.origin
+          : '';
         Object.entries(siteToRender.files).forEach(([path, rawContent]) => {
           if (path === 'index.html') return;
           const content = toStringContent(rawContent);
@@ -2418,6 +2422,11 @@ export function SitePreview({
                 .replace(assetPath2, `'${content}'`)
                 .replace(assetPath3, `"${content}"`)
                 .replace(assetPath4, `'${content}'`);
+              const assetPathSlash1 = new RegExp(`"/${regexSafePath}"`, 'g');
+              const assetPathSlash2 = new RegExp(`'/${regexSafePath}'`, 'g');
+              processedHtml = processedHtml
+                .replace(assetPathSlash1, `"${content}"`)
+                .replace(assetPathSlash2, `'${content}'`);
             }
           } else if (/\.(png|jpe?g|gif|webp|avif|svg|ico)$/i.test(path)) {
             // Inline binary images for preview if available
@@ -2428,9 +2437,13 @@ export function SitePreview({
               const regexSafePath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               const assetPath1 = new RegExp(`\"${regexSafePath}\"`, 'g');
               const assetPath2 = new RegExp(`'${regexSafePath}'`, 'g');
+              const assetPathSlash1 = new RegExp(`\"/${regexSafePath}\"`, 'g');
+              const assetPathSlash2 = new RegExp(`'/${regexSafePath}'`, 'g');
               processedHtml = processedHtml
                 .replace(assetPath1, `\"${dataUrl}\"`)
-                .replace(assetPath2, `'${dataUrl}'`);
+                .replace(assetPath2, `'${dataUrl}'`)
+                .replace(assetPathSlash1, `\"${dataUrl}\"`)
+                .replace(assetPathSlash2, `'${dataUrl}'`);
             }
           }
         });
@@ -2481,26 +2494,28 @@ export function SitePreview({
             (match, href, hash = '') => convertInternalLink(match, href, hash)
           );
 
+        // In the inline iframe (blob: URL), "/images" and "/games" won’t resolve.
+        // Prefix with the current origin to ensure assets load from this app.
         processedHtml = processedHtml
           .replace(
             /(href|src)=\"(games\/[^\"]+)\"/g,
-            (_match, attr, path) => `${attr}="/${path}`+`"`
+            (_match, attr, pth) => baseOrigin ? `${attr}="${baseOrigin}/${pth}"` : `${attr}="/${pth}`+`"`
           )
           .replace(
             /(href|src)='(games\/[^']+)'/g,
-            (_match, attr, path) => `${attr}='/${path}'`
+            (_match, attr, pth) => baseOrigin ? `${attr}='${baseOrigin}/${pth}'` : `${attr}='/${pth}'`
           )
           .replace(
             /(href|src)=\"(images\/[^\"]+)\"/g,
-            (_match, attr, path) => `${attr}="/${path}`+`"`
+            (_match, attr, pth) => baseOrigin ? `${attr}="${baseOrigin}/${pth}"` : `${attr}="/${pth}`+`"`
           )
           .replace(
             /(href|src)='(images\/[^']+)'/g,
-            (_match, attr, path) => `${attr}='/${path}'`
+            (_match, attr, pth) => baseOrigin ? `${attr}='${baseOrigin}/${pth}'` : `${attr}='/${pth}'`
           )
           .replace(/href=(\"|')\.?\/?game(?:\/index\.html|\/|\.html)?\1/gi, (m)=>{
             const firstGame = Object.keys(siteToRender.files).find(p=>/^games\/.+\/game\.html$/.test(p));
-            return firstGame ? `href="/${firstGame}"` : m;
+            return firstGame ? (baseOrigin ? `href="${baseOrigin}/${firstGame}"` : `href="/${firstGame}"`) : m;
           });
       } catch (error) {
         console.error('Preview assembly failed, falling back to raw HTML', error);
@@ -3769,18 +3784,28 @@ export function SitePreview({
                     /\.(png|jpe?g|gif|svg|webp|avif|ico)$/i.test(activeEditorTab) ? (
                       <div className="flex h-full items-center justify-center p-4">
                         {(() => {
-                          const raw = toStringContent(site.files[activeEditorTab]);
-                          const isData = typeof raw === 'string' && raw.startsWith('data:');
-                          const fallback = `/${activeEditorTab.replace(/^\/+/, '')}`;
-                          const src = isData && raw.length > 0 ? raw : fallback;
+                          const val = site.files[activeEditorTab] as any;
+                          // Try to build data URL from raw bytes
+                          const bytes = toUint8Array(val);
+                          let src: string | null = null;
+                          if (bytes && bytes.length > 0) {
+                            try {
+                              let bin = '';
+                              for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+                              const b64 = typeof btoa !== 'undefined' ? btoa(bin) : '';
+                              if (b64) src = `data:${guessMimeFromPath(activeEditorTab)};base64,${b64}`;
+                            } catch {}
+                          }
+                          if (!src) {
+                            const raw = toStringContent(val);
+                            if (typeof raw === 'string' && raw.startsWith('data:')) src = raw;
+                          }
+                          if (!src) src = `/${activeEditorTab.replace(/^\/+/, '')}`;
                           return (
                             <img
                               src={src}
                               alt={activeEditorTab}
                               className="max-h-full max-w-full object-contain"
-                              onError={(e) => {
-                                // if public fallback fails, keep broken state silently
-                              }}
                             />
                           );
                         })()}

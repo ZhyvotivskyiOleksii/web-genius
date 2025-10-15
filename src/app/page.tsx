@@ -331,21 +331,56 @@ export default function Home() {
             }
           }
 
-          // Persist only lightweight, текстовые и ключевые image-файлы. Пропускаем games/ и тяжелые data:URI.
-          const TEXT_EXT = new Set(['html','htm','css','js','ts','tsx','json','md','svg','txt']);
+          // Persist EVERYTHING, конвертируя бинарники в data:URL, чтобы редактор всегда видел реальные картинки
           const IMAGE_EXT = new Set(['png','jpg','jpeg','webp','avif','gif','svg','ico']);
-          const rows = Object.entries(state.site.files)
-            .filter(([p]) => !p.startsWith('games/'))
-            .filter(([p, c]) => {
-              const ext = (p.split('.').pop() || '').toLowerCase();
-              const isText = TEXT_EXT.has(ext);
-              const isImage = p.startsWith('images/') && IMAGE_EXT.has(ext);
-              if (!isText && !isImage) return false;
-              // Ограничение: слишком большие data:URI не пишем в БД
-              if (typeof c === 'string' && c.startsWith('data:') && c.length > 240_000) return false;
-              return true;
-            })
-            .map(([path, content]) => ({ site_id: id!, path, content: String(content || ''), updated_by: userId }));
+          const toUint8 = (raw: any): Uint8Array | null => {
+            if (raw instanceof Uint8Array) return raw;
+            if (raw && typeof raw === 'object') {
+              if (raw.type === 'Buffer' && Array.isArray(raw.data)) return Uint8Array.from(raw.data as number[]);
+              if (typeof ArrayBuffer !== 'undefined') {
+                if (raw instanceof ArrayBuffer) return new Uint8Array(raw);
+                if (ArrayBuffer.isView && ArrayBuffer.isView(raw)) {
+                  const v = raw as ArrayBufferView; return new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+                }
+              }
+            }
+            return null;
+          };
+          const guessMime = (p: string): string => {
+            const ext = (p.split('.').pop() || '').toLowerCase();
+            switch (ext) {
+              case 'png': return 'image/png';
+              case 'jpg': case 'jpeg': return 'image/jpeg';
+              case 'webp': return 'image/webp';
+              case 'gif': return 'image/gif';
+              case 'svg': return 'image/svg+xml';
+              case 'avif': return 'image/avif';
+              case 'ico': return 'image/x-icon';
+              default: return 'application/octet-stream';
+            }
+          };
+          const toDataUrlIfNeeded = (p: string, v: any): string => {
+            if (typeof v === 'string' && v.startsWith('data:')) return v;
+            const ext = (p.split('.').pop() || '').toLowerCase();
+            const isImg = p.startsWith('images/') || IMAGE_EXT.has(ext);
+            const isGameAsset = p.startsWith('games/');
+            if (!isImg && !isGameAsset) return String(v ?? '');
+            const bytes = toUint8(v);
+            if (!bytes) return String(v ?? '');
+            // base64 encode in browser-friendly way
+            let binStr = '';
+            for (let i = 0; i < bytes.length; i++) binStr += String.fromCharCode(bytes[i]);
+            const b64 = typeof btoa !== 'undefined' ? btoa(binStr) : '';
+            if (!b64) return String(v ?? '');
+            const mime = isImg ? guessMime(p) : 'application/octet-stream';
+            return `data:${mime};base64,${b64}`;
+          };
+          const rows = Object.entries(state.site.files).map(([path, content]) => ({
+            site_id: id!,
+            path,
+            content: toDataUrlIfNeeded(path, content),
+            updated_by: userId,
+          }));
           if (rows.length) {
             const chunkSize = 40;
             for (let i = 0; i < rows.length; i += chunkSize) {

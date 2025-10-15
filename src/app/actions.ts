@@ -563,12 +563,13 @@ export async function downloadZipAction(siteData: { domain: string, files: Recor
               addFile(pathKey, content);
               if (/\.html?$/i.test(pathKey)) {
                 const html = content || '';
-            const rx = /(src|href)=("|')(images\/[^"]+?)\2/gi;
+            // Capture both relative (images/...) and root-absolute (/images/...)
+            const rx = /(src|href)=("|')(?:\/)?(images\/[^"]+?)\2/gi;
             let m: RegExpExecArray | null;
             while ((m = rx.exec(html))) {
               referencedAssets.add(m[3]);
             }
-            const rxGames = /(src|href)=("|')(games\/[^"']+?)\2/gi;
+            const rxGames = /(src|href)=("|')(?:\/)?(games\/[^"']+?)\2/gi;
             while ((m = rxGames.exec(html))) {
               referencedAssets.add(m[3]);
             }
@@ -577,7 +578,9 @@ export async function downloadZipAction(siteData: { domain: string, files: Recor
             // 2) Attach missing referenced images from public/
             const basePublic = path.join(process.cwd(), 'public');
             for (const asset of referencedAssets) {
-              if (siteData.files[asset]) continue; // already present
+              const val = (siteData.files as any)[asset];
+              const hasUsefulContent = typeof val === 'string' ? val.trim().length > 0 : !!val;
+              if (hasUsefulContent) continue; // already present and non-empty
               try {
                 const disk = path.join(basePublic, asset);
                 const buf = await fs.readFile(disk);
@@ -1201,8 +1204,9 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
       for (const [p, c] of Object.entries(files)) {
         if (!/\.html?$/i.test(p)) continue;
         const html = String(c || '');
-        const rxImg = /(src|href)=("|')(images\/[^"']+?)\2/gi;
-        const rxGame = /(src|href)=("|')(games\/[^"']+?)\2/gi;
+        // Capture both relative (images/...) and root-absolute (/images/...) references
+        const rxImg = /(src|href)=("|')(?:\/)?(images\/[^"']+?)\2/gi;
+        const rxGame = /(src|href)=("|')(?:\/)?(games\/[^"']+?)\2/gi;
         let m: RegExpExecArray | null;
         while ((m = rxImg.exec(html))) referenced.add(m[3]);
         while ((m = rxGame.exec(html))) referenced.add(m[3]);
@@ -1211,7 +1215,9 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
       // images first
       for (const asset of referenced) {
         if (!asset.startsWith('images/')) continue;
-        if (files[asset]) continue;
+        const val = (files as any)[asset];
+        const hasUsefulContent = typeof val === 'string' ? val.trim().length > 0 : !!val;
+        if (hasUsefulContent) continue;
         try {
           const disk = path.join(basePublic, asset);
           const buf = await fs.readFile(disk);
