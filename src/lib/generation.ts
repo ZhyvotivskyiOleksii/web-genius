@@ -9,16 +9,12 @@ import { marked } from 'marked';
 import { generateSiteStructure, SiteStructure } from '@/ai/flows/generate-site-structure';
 import { generateHtmlForSection } from '@/ai/flows/generate-html-for-section';
 import {
-  getIndexHtmlTemplate,
-  getGamePageTemplate,
-  getPrivacyPolicyTemplate,
-  getTermsPageTemplate,
-  mainJsTemplate,
-  stylesCssTemplate,
-  chooseBrandingTheme,
-  inferBrandVisual,
-} from '@/lib/templates';
-import type { SectionNavItem } from '@/lib/templates';
+  generateIndexPageHtml,
+  generatePrivacyPolicyPageHtml,
+  generateTermsPageHtml,
+  generateGameFullPageHtml,
+} from '@/ai/flows/generate-full-pages';
+type SectionNavItem = { id: string; label: string; type: string; order?: number };
 import { deriveDomainName } from '@/lib/domain';
 import manifest from '@/lib/asset-manifest.json';
 
@@ -29,6 +25,99 @@ function randomChoice<T>(items: T[], fallback?: T): T {
   }
   const index = Math.floor(Math.random() * items.length);
   return items[index] ?? (fallback !== undefined ? fallback : items[0]);
+}
+
+// Helper: pick a visual accent class for section backgrounds
+function pickSectionAccent(index: number): string {
+  if (!SECTION_ACCENTS.length) return '';
+  return SECTION_ACCENTS[index % SECTION_ACCENTS.length];
+}
+
+// Inject small CSS/JS helpers into final HTML to improve visual quality
+function injectEnhancements(html: string): string {
+  if (!html || typeof html !== 'string') return html;
+  const styleBlock = [
+    '<style id="site-enhancements-css">',
+    '  .reveal-on-scroll{opacity:0;transform:translateY(14px) scale(.98);transition:opacity .6s ease,transform .6s ease;will-change:transform,opacity}',
+    '  .reveal-on-scroll.is-visible{opacity:1;transform:none}',
+    '  .section-accent-aurora{position:relative;overflow:hidden}',
+    "  .section-accent-aurora::before{content:'';position:absolute;inset:-25%;pointer-events:none;filter:blur(40px);background:radial-gradient(40% 40% at 20% 20%,rgba(99,102,241,.35),transparent 70%),radial-gradient(40% 40% at 80% 20%,rgba(236,72,153,.25),transparent 70%),radial-gradient(40% 40% at 50% 80%,rgba(34,197,94,.2),transparent 70%)}",
+    '  .section-accent-grid{background-image:linear-gradient(rgba(148,163,184,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,.12) 1px,transparent 1px);background-size:28px 28px;background-position:-14px -14px}',
+    '  .section-accent-wave{background:linear-gradient(135deg,rgba(59,130,246,.15),rgba(139,92,246,.15));backdrop-filter:saturate(120%)}',
+    '  .section-accent-noise{position:relative;overflow:hidden}',
+    "  .section-accent-noise::after{content:'';position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(rgba(255,255,255,.04) 1px,transparent 1px),radial-gradient(rgba(0,0,0,.05) 1px,transparent 1px);background-size:3px 3px,4px 4px;mix-blend-mode:overlay;opacity:.6}",
+    '  .section-accent-lens{position:relative;overflow:hidden}',
+    "  .section-accent-lens::before{content:'';position:absolute;inset:-30%;background:radial-gradient(50% 50% at 50% 50%,rgba(255,255,255,.05),transparent 70%);pointer-events:none}",
+    '</style>'
+  ].join('\n');
+
+  const scriptBlock = [
+    '<script id="site-enhancements" data-auto>',
+    '(function(){',
+    '  var prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;',
+    '  if(!prefersReduced){',
+    '    var els = Array.from(document.querySelectorAll(".reveal-on-scroll"));',
+    '    try {',
+    '      var io = new IntersectionObserver(function(entries){ entries.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add("is-visible"); io.unobserve(e.target);} }); }, {rootMargin:"0px 0px -10% 0px", threshold:0.08});',
+    '      els.forEach(function(el){ io.observe(el); });',
+    '    } catch (e) {',
+    '      els.forEach(function(el){ el.classList.add("is-visible"); });',
+    '    }',
+    '  }',
+    '  if(!prefersReduced){',
+    '    var pEls = Array.from(document.querySelectorAll("[data-parallax]"));',
+    '    var ticking = false;',
+    '    var raf = window.requestAnimationFrame || function(fn){ return setTimeout(fn, 16); };',
+    '    function update(){',
+    '      ticking = false;',
+    '      var vh = window.innerHeight || 1;',
+    '      pEls.forEach(function(el){',
+    '        var speed = parseFloat(el.getAttribute("data-parallax")) || 0.15;',
+    '        var r = el.getBoundingClientRect();',
+    '        var center = (r.top + r.bottom) / 2;',
+    '        var delta = (center - vh/2) / vh;',
+    '        var translate = Math.max(-40, Math.min(40, -delta * speed * 120));',
+    '        el.style.transform = "translate3d(0," + translate + "px,0)";',
+    '      });',
+    '    }',
+    '    function onScroll(){ if(!ticking){ ticking = true; raf(update); } }',
+    '    window.addEventListener("scroll", onScroll, { passive: true });',
+    '    window.addEventListener("resize", onScroll, { passive: true });',
+    '    onScroll();',
+    '  }',
+    '})();',
+    '</script>'
+  ].join('\n');
+
+  let out = html;
+  if (!/id=\"site-enhancements-css\"/.test(out)) {
+    out = out.replace(/<\/head>/i, styleBlock + '\n</head>');
+  }
+  if (!/id=\"site-enhancements\"/.test(out)) {
+    out = out.replace(/<\/body>/i, scriptBlock + '\n</body>');
+  }
+  return out;
+}
+
+// Replace broken <img src> URLs with a known asset from our library so UI never shows empty images.
+function normalizeImageTags(html: string, pool: string[], extras?: string[]): string {
+  if (!html || !pool || pool.length === 0) return html;
+  try {
+    const combined = [...pool, ...((extras || []).filter(Boolean))];
+    const first = combined[0] || pool[0];
+    const set = new Set(combined.map((p) => p.replace(/^\/?/, '')));
+    return html.replace(/<img\b([^>]*?)src=("|')([^"']+)(\2)([^>]*)>/gi, (m, pre, q, url, _q2, post) => {
+      const u = (url || '').trim();
+      if (!u || /^https?:/i.test(u) || /^data:/i.test(u)) return m;
+      // Do not rewrite explicit logo or favicon assets
+      if (/\/logo-(bar|casino)\//i.test(u) || /\/favicon\//i.test(u) || /(^|\/)logo(\.|\b)/i.test(u)) return m;
+      const normalized = u.replace(/^\/?/, '');
+      if (set.has(normalized)) return m.replace(url, normalized);
+      return `<img${pre}src=${q}${first}${q}${post}>`;
+    });
+  } catch {
+    return html;
+  }
 }
 
 function detectLanguage(prompt: string): { name: string; iso: string } {
@@ -79,6 +168,7 @@ function detectLanguage(prompt: string): { name: string; iso: string } {
     return { name: 'Polish', iso: 'pl' };
   }
   if (cyrillicRegex.test(prompt)) {
+    // FIXED: Default to Ukrainian for Cyrillic as per user preference
     return { name: 'Ukrainian', iso: 'uk' };
   }
   return { name: 'English', iso: 'en' };
@@ -505,57 +595,33 @@ function createStyleHintPool(themeMode: 'light' | 'dark', isGameSite: boolean): 
   return shuffleArray(Array.from(new Set(pool)));
 }
 
+// FIXED: This function was too aggressive and stripped valid styling.
+// It's better to trust the AI's Tailwind skills and only remove potentially harmful tags.
 function sanitizeSectionHtml(html: string): string {
   if (!html) return '';
   let clean = html;
+  
+  // Remove only potentially harmful or layout-breaking elements.
   const patterns = [
-    /<\s*(header|nav|footer)[^>]*>[\s\S]*?<\/\s*\1>/gi,
-    /<\s*style[^>]*>[\s\S]*?<\/\s*style>/gi,
-    /<\s*script[^>]*>[\s\S]*?<\/\s*script>/gi,
-    /<!--[\s\S]*?-->/g,
+    /<\s*(header|nav|footer)[^>]*>[\s\S]*?<\/\s*\1>/gi, // These are handled by the main page template
+    /<\s*style[^>]*>[\s\S]*?<\/\s*style>/gi,           // Avoid inline styles
+    /<\s*script[^>]*>[\s\S]*?<\/\s*script>/gi,          // Avoid inline scripts
+    /<!--[\s\S]*?-->/g,                                 // Remove comments
   ];
+
   for (const pattern of patterns) {
     clean = clean.replace(pattern, '');
   }
+
+  // Removing inline style attributes is still a good idea for consistency.
   clean = clean.replace(/\sstyle="[^"]*"/gi, '');
-  const disallowedPrefixes = ['bg-gradient', 'from-', 'via-', 'to-', 'mix-blend-', 'shadow-inner', 'shadow-[', 'drop-shadow'];
-  const disallowedContains = ['opacity-', 'text-transparent'];
-  clean = clean.replace(/class="([^"]*)"/gi, (match, classValue) => {
-    const tokens = classValue
-      .split(/\s+/)
-      .map((token) => token.trim())
-      .filter(Boolean);
-    const filtered = tokens.filter((token) => {
-      const lower = token.toLowerCase();
-      if (lower.startsWith('btn-')) return true;
-      if (disallowedPrefixes.some((prefix) => lower.startsWith(prefix))) return false;
-      if (disallowedContains.some((snippet) => lower.includes(snippet))) return false;
-      return true;
-    });
-    if (!filtered.length) {
-      return '';
-    }
-    return `class="${filtered.join(' ')}"`;
-  });
-  clean = clean.replace(/class="([^"]*btn-(?:primary|secondary)[^"]*)"/gi, (_, classValue) => {
-    const parts = classValue
-      .split(/\s+/)
-      .filter(Boolean)
-      .filter((token: string) => {
-        const lower = token.toLowerCase();
-        if (lower === 'btn-primary' || lower === 'btn-secondary') return true;
-        if (lower.startsWith('btn-')) return true;
-        if (lower.startsWith('bg-') || lower.startsWith('from-') || lower.startsWith('to-') || lower.startsWith('via-') || lower.startsWith('shadow-')) return false;
-        if (lower.startsWith('rounded')) return false;
-        return true;
-      });
-    if (classValue.includes('btn-primary') && !parts.includes('btn-primary')) parts.push('btn-primary');
-    if (classValue.includes('btn-secondary') && !parts.includes('btn-secondary')) parts.push('btn-secondary');
-    const unique = Array.from(new Set(parts));
-    return `class="${unique.join(' ')}"`;
-  });
+  
+  // REMOVED: The aggressive class filtering logic. We will now trust the AI to generate correct Tailwind classes.
+  // This was likely a major cause of the "crooked" visual output.
+
   return clean.trim();
 }
+
 
 function sanitizeIdCandidate(value: string): string {
   return (value || '')
@@ -746,6 +812,7 @@ function createFallbackStructure(siteName: string, language: string, prompt: str
   }
 
   return {
+    creativeBrief: 'Modern, clean, and engaging design with a user-friendly layout.',
     theme: { primaryColor: 'indigo-500', font: 'Inter' },
     sections,
     usage: { inputTokens: 0, outputTokens: 0 },
@@ -756,7 +823,8 @@ function createFallbackStructure(siteName: string, language: string, prompt: str
 function extractRequestedSectionCount(input: string): number | null {
   if (!input) return null;
   const normalized = input.toLowerCase();
-  const digitMatch = normalized.match(/(\d+)\s*(?:section|sections|секц|раздел|block|blocks|блок)/);
+  // Accept forms like "3 секции", "3-секции", "3 sections", "3 blocks", "3 розділи"
+  const digitMatch = normalized.match(/(\d+)\s*[-–—]?\s*(?:section|sections|секц|раздел|block|blocks|блок|розділ|розділи)/);
   if (digitMatch) {
     const count = Number.parseInt(digitMatch[1], 10);
     if (Number.isFinite(count) && count > 0 && count < 50) {
@@ -793,7 +861,7 @@ function extractRequestedSectionCount(input: string): number | null {
     ten: 10,
     'десять': 10,
   };
-  const wordMatch = normalized.match(/\b(один|одна|одну|одной|два|две|двух|три|трех|трёх|четыре|пять|шесть|семь|восемь|девять|десять|one|two|three|four|five|six|seven|eight|nine|ten|single)\b[^\S\r\n]*(?:секц|section|раздел|block|блок)/);
+  const wordMatch = normalized.match(/\b(один|одна|одну|одной|два|две|двух|три|трех|трёх|четыре|пять|шесть|семь|восемь|девять|десять|one|two|three|four|five|six|seven|eight|nine|ten|single)\b[^\S\r\n]*[-–—]?[^\S\r\n]*(?:секц|section|раздел|block|блок|розділ)/);
   if (wordMatch) {
     const value = wordToNumber[wordMatch[1]];
     if (typeof value === 'number') {
@@ -974,9 +1042,9 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       baseSectionShape = 'angular';
     }
     const layoutPrefs = parseLayoutPreferences(prompt);
-    const brandTheme = chooseBrandingTheme({ websiteTypes, preferredMode });
-    const brandVisual = inferBrandVisual(websiteTypes, prompt);
-    const styleHints = createStyleHintPool(brandTheme.mode, isGameSite);
+    const themeMode: 'light' | 'dark' = preferredMode
+      ? preferredMode
+      : (isGameSite ? 'dark' : (Math.random() < 0.5 ? 'light' : 'dark'));
     const selectedLogoAsset = await pickImageAsset(isSportSite ? 'images/logo-bar' : 'images/logo-casino');
 
     // --- Step 1: Read Libraries (Images and Games) via manifest ---
@@ -998,6 +1066,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       }
     }
     const manifestGames = Array.isArray(assets.games) ? assets.games : [];
+    const allImagePoolGlobal: string[] = Array.isArray((manifest as any).images) ? (manifest as any).images as any : [];
     const faviconPaths = Array.isArray(assets.favicons)
       ? assets.favicons.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
       : [];
@@ -1024,6 +1093,11 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       }
     });
     console.log(`Using manifest: found ${imagePaths.length} images and ${gameFolders.length} games (available on disk).`);
+    // Choose single game folder ahead of time (no wrapper pages)
+    let selectedGameFolder: string | undefined = undefined;
+    if (isGameSite && gameFolders.length > 0) {
+      selectedGameFolder = gameFolders[Math.floor(Math.random() * gameFolders.length)];
+    }
 
     // --- Step 2: AI Content Generation ---
     console.log('Step 2.1: Getting site structure...');
@@ -1035,6 +1109,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       structureResult = createFallbackStructure(siteName, languageName, prompt);
     }
     const structure = structureResult;
+    const creativeBrief: string = (structureResult as any).creativeBrief || 'Modern, clean, responsive visual language with cohesive color palette and bold typography.';
     if (!structure || !structure.sections || structure.sections.length === 0) {
       console.warn('Site structure empty after fallback; injecting minimal template.');
       structure.sections = createFallbackStructure(siteName, languageName, prompt).sections;
@@ -1075,7 +1150,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       }
     } else {
       const normalized = new Set(sectionPlan.map(s => (s.type || '').toLowerCase()));
-      const limit = 8;
+      const limit = (String(process.env.WG_FAST || '').toLowerCase() === 'true' || process.env.WG_FAST === '1' || process.env.NODE_ENV !== 'production') ? 3 : 8;
       for (const section of desiredSections) {
         if (sectionPlan.length >= limit) break;
         if (!normalized.has(section.type.toLowerCase())) {
@@ -1086,32 +1161,17 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
     structure.sections = sectionPlan;
 
-    const allowLegalInjection = explicitSectionCount == null;
-
-    if (allowLegalInjection && !sectionPlan.some((s) => (s.type || '').toLowerCase() === 'terms')) {
-      sectionPlan.push({
-        type: 'terms',
-        title: 'Terms & Conditions',
-        details: 'Summarise eligibility (18+), non-monetary nature of the platform, and respectful play guidelines.',
-      });
+    // We no longer inject legal sections into the index page. They are separate pages.
+    const looksLegalByTitle = (s: { title?: string; type?: string }) => {
+      const t = (s.title || '').toLowerCase();
+      return /(terms|privacy|policy|legal|responsible)/i.test(t);
+    };
+    let mainSections = sectionPlan.filter(
+      (s) => !['terms', 'privacy', 'responsible-gaming'].includes((s.type || '').toLowerCase()) && !looksLegalByTitle(s)
+    );
+    if (explicitSectionCount != null && Number.isFinite(explicitSectionCount) && explicitSectionCount > 0) {
+      mainSections = mainSections.slice(0, explicitSectionCount);
     }
-    if (allowLegalInjection && !sectionPlan.some((s) => (s.type || '').toLowerCase() === 'privacy')) {
-      sectionPlan.push({
-        type: 'privacy',
-        title: 'Privacy Snapshot',
-        details: 'Highlight data handling basics, cookie usage, and a link to the full privacy policy.',
-      });
-    }
-    structure.sections = sectionPlan;
-
-    const mainSections = sectionPlan.filter(s => !['terms', 'privacy', 'responsible-gaming'].includes((s.type || '').toLowerCase()));
-    const legalSections = sectionPlan.filter(s => ['terms', 'privacy', 'responsible-gaming'].includes((s.type || '').toLowerCase()));
-    const hasTermsSection = sectionPlan.some((s) => (s.type || '').toLowerCase().includes('terms'));
-    const hasPrivacySection = sectionPlan.some((s) => (s.type || '').toLowerCase().includes('privacy'));
-    const showLegalNavFallback = allowLegalInjection && legalSections.length > 0;
-    const legalLinks: Array<{ label: string; href: string }> = [];
-    legalLinks.push({ label: 'Terms & Conditions', href: 'terms.html' });
-    legalLinks.push({ label: 'Privacy Policy', href: 'privacy-policy.html' });
 
     let totalInputTokens = structureResult.usage?.inputTokens ?? 0;
     let totalOutputTokens = structureResult.usage?.outputTokens ?? 0;
@@ -1119,25 +1179,39 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     console.log(`Step 2.2: Generating ${mainSections.length} sections with limited concurrency...`);
     const themeToUse = structure.theme || { primaryColor: "indigo-500", font: "Inter" };
     const usedImagePaths = new Set<string>();
-    // Pick a single site-wide accent to avoid noisy per-section backgrounds
-    const siteAccent = randomChoice(SECTION_ACCENTS);
+    // Prepare a site-wide image selection to encourage AI usage on index page
+    const siteImagePool: string[] = [];
+    const FAST = (process.env.WG_FAST === '0') ? false : (String(process.env.WG_FAST || '').toLowerCase() === 'true' || process.env.WG_FAST === '1' || process.env.NODE_ENV !== 'production');
+    const maxSiteImages = FAST ? 4 : 12;
+    {
+      const poolCopy = [...imagePaths];
+      while (siteImagePool.length < maxSiteImages && poolCopy.length) {
+        const idx = Math.floor(Math.random() * poolCopy.length);
+        const pick = poolCopy.splice(idx, 1)[0];
+        if (pick) siteImagePool.push(pick);
+      }
+      for (const p of siteImagePool) usedImagePaths.add(p);
+    }
     const sectionResults: { html: string; model?: string }[] = [];
-    const CHUNK_SIZE = model && model.includes('pro') ? 1 : 4;
-    const ctaTarget = isGameSite ? 'game.html' : undefined;
+    // Aggressive parallelism in fast mode or with pro
+    const fastMode = FAST;
+    const parFromEnv = Number.parseInt(String(process.env.WG_PAR || ''), 10);
+    const parValid = Number.isFinite(parFromEnv) && parFromEnv > 0 && parFromEnv <= 16 ? parFromEnv : undefined;
+    const CHUNK_SIZE = parValid ?? (((model && model.includes('pro')) || fastMode) ? (process.env.NODE_ENV !== 'production' ? 10 : 8) : 4);
+    const ctaTarget = isGameSite && selectedGameFolder ? `games/${selectedGameFolder}/game.html` : undefined;
     const sectionIdSet = new Set<string>();
     const navAnchors: SectionNavItem[] = [];
     const navKeysSeen = new Set<string>();
-    let accentCursor = 0;
 
     for (let i = 0; i < mainSections.length; i += CHUNK_SIZE) {
       const slice = mainSections.slice(i, i + CHUNK_SIZE);
       const generated = await Promise.all(slice.map(async (section, index) => {
-        const styleHint = styleHints.length ? styleHints[(i + index) % styleHints.length] : undefined;
-        // Підготуємо набір унікальних зображень для секції (підвищуємо шанс що AI реально вставить їх)
         let sectionImages: string[] = [];
         if (imagePaths.length > 0) {
           const pool = imagePaths.filter((p) => !usedImagePaths.has(p));
-          const take = Math.min(4, Math.max(1, Math.floor(Math.random() * 3) + 1));
+          const isGallery = /^(gallery|games?)$/i.test(section.type || '');
+          const target = isGallery ? 10 : 4;
+          const take = Math.min(target, Math.max(1, Math.floor(Math.random() * (target - 1)) + 1));
           for (let t = 0; t < take && pool.length; t++) {
             const pick = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
             if (pick) {
@@ -1145,7 +1219,6 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
               usedImagePaths.add(pick);
             }
           }
-          // Якщо всі вже використані — все одно дати 1-2 випадкових, щоб AI мав що вставити
           if (!sectionImages.length && imagePaths.length) {
             const idx = Math.floor(Math.random() * imagePaths.length);
             sectionImages = [imagePaths[idx]];
@@ -1155,13 +1228,13 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         const res = await generateHtmlForSection({
           section,
           sitePrompt: prompt,
+          creativeBrief,
           theme: themeToUse,
           imageUrls: sectionImages,
           language: languageName,
-          styleHint,
-          themeMode: brandTheme.mode,
+          themeMode: themeMode,
           ctaTarget,
-          model,
+          model: fastMode ? 'googleai/gemini-2.5-flash' : model,
         });
         if (res.usage?.inputTokens) totalInputTokens += res.usage.inputTokens;
         if (res.usage?.outputTokens) totalOutputTokens += res.usage.outputTokens;
@@ -1172,11 +1245,10 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         if ((section.type || '').toLowerCase() === 'hero') {
           cleanHtml = stripNavLikeBlocks(cleanHtml);
         }
-        // Якщо AI проігнорував картинки — додамо резервний грід із виданого набору
         if (sectionImages.length && !/<img\b/i.test(cleanHtml)) {
           const safeAlt = (section.title || section.type || 'image').toString().slice(0, 60);
-          const imgs = sectionImages.map((src) => `<img src="${src}" alt="${safeAlt}" loading="lazy" />`).join('');
-          cleanHtml += `<div class="wg-img-grid">${imgs}</div>`;
+          const imgs = sectionImages.map((src) => `<img src="${src}" alt="${safeAlt}" loading="lazy" class="w-full h-40 sm:h-48 object-cover rounded-xl shadow-md" />`).join('');
+          cleanHtml += `<div class="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6">${imgs}</div>`;
         }
         const baseCandidate = sanitizeIdCandidate(section.type || section.title || `section-${i + index + 1}`) || `section-${i + index + 1}`;
         let candidate = baseCandidate;
@@ -1186,47 +1258,33 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         }
         sectionIdSet.add(candidate);
 
-        const accentClass = siteAccent;
         const shapeChoice = pickSectionShape(section, baseSectionShape, i + index);
-        const shapeClass = SECTION_SHAPE_CLASS_MAP[shapeChoice] ?? SECTION_SHAPE_CLASS_MAP.flat;
+        const accentClass = pickSectionAccent(i + index);
 
         if (/^<section\b/i.test(cleanHtml)) {
           cleanHtml = cleanHtml.replace(/^<section\b([^>]*)>/i, (match, attrs) => {
             let updated = attrs || '';
+            // id
             if (/id\s*=/.test(updated)) {
-              updated = updated.replace(/id\s*=\s*"[^"]*"/i, ` id="${candidate}"`);
+              updated = updated.replace(/id\s*=\s*\"[^\"]*\"/i, ` id=\"${candidate}\"`);
             } else {
-              updated += ` id="${candidate}"`;
+              updated += ` id=\"${candidate}\"`;
             }
+            // data-section-type
             if (section.type && !/data-section-type=/.test(updated)) {
-              updated += ` data-section-type="${section.type}"`;
+              updated += ` data-section-type=\"${section.type}\"`;
             }
-            if (!/data-section-accent=/.test(updated)) {
-              updated += ` data-section-accent="${accentClass}"`;
-            }
-            if (!/data-section-shape=/.test(updated)) {
-              updated += ` data-section-shape="${shapeChoice}"`;
-            }
-            if (/class\s*=/.test(updated)) {
-              updated = updated.replace(/class\s*=\s*"([^"]*)"/i, (full: string, classes: string) => {
-                const appended = classes.split(/\s+/).filter(Boolean);
-                const filtered = appended.filter((cls: string) => cls && !cls.startsWith('shape-'));
-                if (!filtered.includes('generated-section')) filtered.push('generated-section');
-                if (!filtered.includes(accentClass)) filtered.push(accentClass);
-                if (!filtered.includes(shapeClass)) filtered.push(shapeClass);
-                return ` class="${filtered.join(' ')}"`;
-              });
+            // classes: ensure reveal-on-scroll + accent present
+            if (/class\s*=\s*\"([^\"]*)\"/i.test(updated)) {
+              updated = updated.replace(/class\s*=\s*\"([^\"]*)\"/i, (m: string, cls: string) => ` class=\"${cls} reveal-on-scroll ${accentClass}\"`);
             } else {
-              updated += ` class="generated-section ${accentClass} ${shapeClass}"`;
-            }
-            if (/data-section-shape=/.test(updated) && !new RegExp(shapeChoice).test(updated)) {
-              updated = updated.replace(/data-section-shape="[^"]*"/i, ` data-section-shape="${shapeChoice}"`);
+              updated += ` class=\"reveal-on-scroll ${accentClass}\"`;
             }
             return `<section${updated}>`;
           });
         } else {
-          const sectionTypeAttr = section.type ? ` data-section-type="${section.type}"` : '';
-          cleanHtml = `<section id="${candidate}"${sectionTypeAttr} data-section-accent="${accentClass}" data-section-shape="${shapeChoice}" class="generated-section ${accentClass} ${shapeClass}">${cleanHtml}</section>`;
+          const sectionTypeAttr = section.type ? ` data-section-type=\"${section.type}\"` : '';
+          cleanHtml = `<section id=\"${candidate}\" class=\"reveal-on-scroll ${accentClass}\"${sectionTypeAttr}>${cleanHtml}</section>`;
         }
         const sectionLower = cleanHtml.toLowerCase();
         if (sectionLower.includes('cookie') && (sectionLower.includes('accept') || sectionLower.includes('consent'))) {
@@ -1263,96 +1321,25 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         return orderA - orderB;
       });
 
-    const hasTermsAnchor = sortedNavAnchors.some((anchor) => /terms/.test(anchor.type) || anchor.id === 'terms');
-    if (!hasTermsAnchor && sectionIdSet.has('terms')) {
-      sortedNavAnchors.push({ id: 'terms', label: 'Terms', type: 'terms', order: NAV_RULES.length + sortedNavAnchors.length });
-    }
-
-    if (legalSections.length) {
-      const legalHint = brandTheme.mode === 'light'
-        ? 'Keep the layout extremely simple: neutral background, clear headings, ordered lists for key policies, and a prominent link to the full document.'
-        : 'Use a flat dark surface with light typography, subtle borders, and concise bullet points summarising the policy.';
-      for (const section of legalSections) {
-        try {
-          const res = await generateHtmlForSection({
-            section,
-            sitePrompt: prompt,
-            theme: themeToUse,
-            language: languageName,
-            styleHint: legalHint,
-            themeMode: brandTheme.mode,
-            ctaTarget: isGameSite ? 'game.html' : undefined,
-          });
-          let cleanHtml = sanitizeSectionHtml(res.htmlContent || '');
-          if (!cleanHtml) continue;
-          const baseCandidate = sanitizeIdCandidate(section.type || section.title || 'legal');
-          const candidate = baseCandidate && !sectionIdSet.has(baseCandidate)
-            ? baseCandidate
-            : `${baseCandidate || 'legal'}-${sectionResults.length + 1}`;
-          sectionIdSet.add(candidate);
-          const accentClass = siteAccent;
-          const shapeChoice = 'flat';
-          const shapeClass = SECTION_SHAPE_CLASS_MAP[shapeChoice];
-          if (/^<section\b/i.test(cleanHtml)) {
-            cleanHtml = cleanHtml.replace(/^<section\b([^>]*)>/i, (match, attrs) => {
-              let updated = attrs || '';
-              if (/id\s*=/.test(updated)) {
-                updated = updated.replace(/id\s*=\s*"[^"]*"/i, ` id="${candidate}"`);
-              } else {
-                updated += ` id="${candidate}"`;
-              }
-              if (section.type && !/data-section-type=/.test(updated)) {
-                updated += ` data-section-type="${section.type}"`;
-              }
-              if (!/data-section-accent=/.test(updated)) {
-                updated += ` data-section-accent="${accentClass}"`;
-              }
-              if (!/data-section-shape=/.test(updated)) {
-                updated += ` data-section-shape="${shapeChoice}"`;
-              }
-              if (/class\s*=/.test(updated)) {
-                updated = updated.replace(/class\s*=\s*"([^"]*)"/i, (full: string, classes: string) => {
-                  const filtered = classes.split(/\s+/).filter(Boolean).filter((cls: string) => !cls.startsWith('shape-'));
-                  if (!filtered.includes('generated-section')) filtered.push('generated-section');
-                  if (!filtered.includes(accentClass)) filtered.push(accentClass);
-                  if (!filtered.includes(shapeClass)) filtered.push(shapeClass);
-                  return ` class="${filtered.join(' ')}"`;
-                });
-              } else {
-                updated += ` class="generated-section ${accentClass} ${shapeClass}"`;
-              }
-              return `<section${updated}>`;
-            });
-          } else {
-            const sectionTypeAttr = section.type ? ` data-section-type="${section.type}"` : '';
-            cleanHtml = `<section id="${candidate}"${sectionTypeAttr} data-section-accent="${accentClass}" data-section-shape="${shapeChoice}" class="generated-section ${accentClass} ${shapeClass}">${cleanHtml}</section>`;
-          }
-          sectionResults.push({ html: cleanHtml, model: res.model });
-          if (!navKeysSeen.has(section.type || candidate)) {
-            navKeysSeen.add(section.type || candidate);
-            const legalLabel = section.title || (section.type === 'terms' ? 'Terms & Conditions' : 'Privacy Snapshot');
-            sortedNavAnchors.push({ id: candidate, label: legalLabel, type: section.type || candidate, order: NAV_RULES.length + sortedNavAnchors.length });
-          }
-        } catch (error) {
-          console.warn('Failed to render legal section', error);
-        }
-      }
-    }
-
     const allSectionsHtml = sectionResults.map(result => result.html).join('\n\n');
 
     const policyLanguage = languageName;
-    console.log(`Step 2.3: Generating unique privacy policy in ${policyLanguage}...`);
-    const policyResult: FlowResult<PolicyContent> = await generatePolicyContent({ siteName, siteDescription: prompt, language: policyLanguage });
-    if (policyResult.usage?.inputTokens) totalInputTokens += policyResult.usage.inputTokens;
-    if (policyResult.usage?.outputTokens) totalOutputTokens += policyResult.usage.outputTokens;
-    const policyHeadingClass = brandTheme.mode === 'light'
-      ? 'text-3xl font-bold text-slate-900 !mt-12 !mb-4'
-      : 'text-3xl font-bold text-white !mt-12 !mb-4';
-    const policyContentHtml = policyResult.sections.map(section => {
-      const contentHtml = marked.parse(section.content);
-      return stripEmojis(`<section><h2 id="${section.id}" class="${policyHeadingClass}">${section.title}</h2>${contentHtml}</section>`);
-    }).join('\n\n');
+    let policyContentHtml = '';
+    if (!FAST) {
+      console.log(`Step 2.3: Generating unique privacy policy in ${policyLanguage}...`);
+      const policyResult: FlowResult<PolicyContent> = await generatePolicyContent({ siteName, siteDescription: prompt, language: policyLanguage });
+      if (policyResult.usage?.inputTokens) totalInputTokens += policyResult.usage.inputTokens;
+      if (policyResult.usage?.outputTokens) totalOutputTokens += policyResult.usage.outputTokens;
+      const policyHeadingClass = themeMode === 'light'
+        ? 'text-3xl font-bold text-slate-900 !mt-12 !mb-4'
+        : 'text-3xl font-bold text-white !mt-12 !mb-4';
+      policyContentHtml = policyResult.sections.map(section => {
+        const contentHtml = marked.parse(section.content);
+        return stripEmojis(`<section><h2 id="${section.id}" class="${policyHeadingClass}">${section.title}</h2>${contentHtml}</section>`);
+      }).join('\n\n');
+    } else {
+      policyContentHtml = `<section><h2 id="intro" class="text-3xl font-bold">Privacy Policy</h2><p>This demo does not store personal data. Cookies may be used for basic preferences. 18+ entertainment only.</p></section>`;
+    }
 
     // --- Step 3: Assemble Final Files Object ---
     console.log('Step 3: Assembling final files object...');
@@ -1362,8 +1349,8 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     
     const files: Record<string, Buffer | string> = {};
     
-    // Game page logic
-    if (isGameSite && gameFolders.length > 0) {
+    // Game page logic disabled: do NOT generate wrapper pages
+    if (false && isGameSite && gameFolders.length > 0) {
       console.log('Step 3.1: Generating game page...');
       const randomGameFolder = gameFolders[Math.floor(Math.random() * gameFolders.length)];
 
@@ -1373,30 +1360,31 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         : `games/${randomGameFolder}/game.html`;
 
       const gamePageContentResult: FlowResult<GamePageContent> = await generateGamePageContent({ siteName: title, language: languageName, model });
-      if (gamePageContentResult.usage?.inputTokens) totalInputTokens += gamePageContentResult.usage.inputTokens;
-      if (gamePageContentResult.usage?.outputTokens) totalOutputTokens += gamePageContentResult.usage.outputTokens;
+      totalInputTokens += gamePageContentResult.usage?.inputTokens ?? 0;
+      totalOutputTokens += gamePageContentResult.usage?.outputTokens ?? 0;
 
       const gpTitle = stripEmojis(gamePageContentResult.title || '');
       const gpDisc = stripEmojis(gamePageContentResult.disclaimerHtml || '');
-      files['game.html'] = getGamePageTemplate(
-        title,
-        gpTitle,
-        gameIframePath,
-        gpDisc,
-        sortedNavAnchors,
-        brandTheme,
-        brandVisual,
-        websiteTypes,
-        selectedFaviconPath,
-        layoutPrefs.includeHeader,
-        layoutPrefs.includeFooter,
-        selectedLogoAsset?.webPath,
-        baseSectionShape,
-        {
-          includeLegalNav: showLegalNavFallback,
-          legalLinks,
-        }
-      );
+      try {
+        const gameHtml = await generateGameFullPageHtml({
+          siteName: title,
+          pageTitle: gpTitle,
+          gameIframePath,
+          disclaimerHtml: gpDisc,
+          language: languageName,
+          faviconPath: selectedFaviconPath,
+          logoPath: selectedLogoAsset?.webPath,
+        });
+        files['game.html'] = gameHtml.html;
+      } catch (e) {
+        console.warn('generateGameFullPageHtml failed. Inserting minimal game page.');
+        files['game.html'] = `<!doctype html><html><head><meta charset="utf-8"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">` +
+          `<title>${title} — Demo Game</title><script src=\"https://cdn.tailwindcss.com\"></script></head><body class=\"bg-slate-950 text-slate-100\">` +
+          `<main class=\"max-w-6xl mx-auto p-6\"><h1 class=\"text-3xl font-bold mb-4\">${gpTitle || 'Demo Game'}</h1>` +
+          `<div class=\"rounded-xl overflow-hidden aspect-video bg-black mb-6\"><iframe src=\"${gameIframePath}\" class=\"w-full h-full\" frameborder=\"0\"></iframe></div>` +
+          `<p class=\"text-sm opacity-80\"><span class=\"material-icons align-middle mr-1\">eighteen_up_rating</span> Entertainment-only social casino demo. 18+ only. No real-money play.</p>` +
+          `</main></body></html>`;
+      }
 
       // Bundle the selected game's assets into the export so the iframe works offline.
       try {
@@ -1411,62 +1399,124 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       }
     }
 
-    // Add standard files
-    files['index.html'] = getIndexHtmlTemplate(
-      title,
-      allSectionsHtml,
-      websiteTypes,
-      sortedNavAnchors,
-      brandTheme,
-      brandVisual,
-      selectedFaviconPath,
-      layoutPrefs.includeHeader,
-      layoutPrefs.includeFooter,
-      selectedLogoAsset?.webPath,
-      baseSectionShape,
-      {
-        includeLegalNav: showLegalNavFallback,
-        legalLinks,
+    // Bundle only one game's assets (no wrapper pages)
+    if (isGameSite && selectedGameFolder) {
+      try {
+        const gameAssets = await getFilesRecursively(path.join(sourceGamesDir, selectedGameFolder));
+        for (const [relative, buffer] of Object.entries(gameAssets)) {
+          const normalizedRelative = relative.split(path.sep).join('/');
+          const zipPath = ['games', selectedGameFolder, normalizedRelative].join('/');
+          files[zipPath] = buffer;
+        }
+      } catch (error) {
+        console.warn(`Failed to attach game assets for ${selectedGameFolder}:`, error);
       }
-    );
-    files['privacy-policy.html'] = getPrivacyPolicyTemplate(
-      title,
-      normalizedDomain,
-      policyContentHtml,
-      sortedNavAnchors,
-      brandTheme,
-      brandVisual,
-      websiteTypes,
-      selectedFaviconPath,
-      layoutPrefs.includeHeader,
-      layoutPrefs.includeFooter,
-      selectedLogoAsset?.webPath,
-      baseSectionShape,
-      {
-        includeLegalNav: showLegalNavFallback,
-        legalLinks,
+    }
+
+    // Generate additional game pages (total up to 4) and provide links to index
+    let gamePageEntries: Array<{ title: string; href: string; cover?: string }> = [];
+    if (isGameSite && gameFolders.length > 0) {
+      try {
+        // Single entry only
+        if (selectedGameFolder) {
+          const cover = imagePaths.length ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
+          gamePageEntries = [{
+            title: stripEmojis(`Game: ${selectedGameFolder.replace(/[-_]/g, ' ')}`) || 'Game',
+            href: `games/${selectedGameFolder}/game.html`,
+            cover,
+          }];
+        }
+      } catch (err) {
+        console.warn('Multi-game generation skipped due to error:', err);
       }
-    );
-    files['terms.html'] = getTermsPageTemplate(
-      title,
-      normalizedDomain,
-      languageName,
-      sortedNavAnchors,
-      brandTheme,
-      brandVisual,
-      websiteTypes,
-      selectedFaviconPath,
-      layoutPrefs.includeHeader,
-      layoutPrefs.includeFooter,
-      selectedLogoAsset?.webPath,
-      baseSectionShape,
-    );
-    files['scripts/main.js'] = mainJsTemplate;
-    files['styles/style.css'] = stylesCssTemplate;
+    }
+
+    // Add standard files via AI (no static templates)
+    try {
+      const anchorsPayload = sortedNavAnchors.map((a) => ({ id: a.id, label: a.label }));
+      const indexResult = await generateIndexPageHtml({
+        siteName: title,
+        sitePrompt: prompt,
+        language: languageName,
+        sectionsHtml: allSectionsHtml,
+        hasGame: isGameSite,
+        logoPath: selectedLogoAsset?.webPath,
+        imageUrls: siteImagePool,
+        gamePages: gamePageEntries,
+        anchors: anchorsPayload,
+        faviconPath: selectedFaviconPath,
+      });
+      let indexHtml = injectEnhancements(indexResult.html);
+      indexHtml = normalizeImageTags(indexHtml, allImagePoolGlobal.length ? allImagePoolGlobal : siteImagePool, [selectedLogoAsset?.webPath || '', selectedFaviconPath || '']);
+      if (selectedFaviconPath && !/<link[^>]+rel=("|')icon\1/i.test(indexHtml)) {
+        indexHtml = indexHtml.replace(/<\/head>/i, `<link rel=\"icon\" href=\"/${selectedFaviconPath}\">\n</head>`);
+      }
+      // Fix stray links to /game or /game/index.html -> point to first actual game
+      const fixGameHref = (html: string): string => {
+        const firstHref = gamePageEntries[0]?.href || (ctaTarget || '');
+        if (!firstHref) return html;
+        return html
+          .replace(/href=("|')\.?\/?game(?:\/index\.html|\/|\.html)?\1/gi, (m, q) => `href=${q}${firstHref}${q}`);
+      };
+      indexHtml = fixGameHref(indexHtml);
+      if (!isGameSite) {
+        // Safety: remove accidental links to game.html if model added any.
+        indexHtml = indexHtml
+          .replace(/href=("|')game\.html\1/gi, 'href="#"')
+          .replace(/data-preview-path=("|')game\.html\1/gi, '');
+      }
+      files['index.html'] = indexHtml;
+    } catch (e) {
+      console.warn('generateIndexPageHtml failed. Falling back to concatenated sections only.');
+      files['index.html'] = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">` +
+        `<title>${title}</title><script src=\"https://cdn.tailwindcss.com\"></script></head><body>` +
+        `${allSectionsHtml}` +
+        `</body></html>`;
+    }
+    try {
+      const privacyResult = await generatePrivacyPolicyPageHtml({
+        siteName: title,
+        domain: normalizedDomain,
+        language: languageName,
+        contentHtml: policyContentHtml,
+        faviconPath: selectedFaviconPath,
+        logoPath: selectedLogoAsset?.webPath,
+      });
+      files['privacy-policy.html'] = injectEnhancements(normalizeImageTags(privacyResult.html, allImagePoolGlobal.length ? allImagePoolGlobal : siteImagePool, [selectedLogoAsset?.webPath || '', selectedFaviconPath || '']));
+    } catch (e) {
+      console.warn('generatePrivacyPolicyPageHtml failed. Inserting minimal fallback.');
+      files['privacy-policy.html'] = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">` +
+        `<title>Privacy Policy - ${title}</title><script src=\"https://cdn.tailwindcss.com\"></script></head><body>` +
+        `<main class=\"max-w-3xl mx-auto p-6\">${policyContentHtml}</main></body></html>`;
+    }
+    try {
+      const termsResult = await generateTermsPageHtml({
+        siteName: title,
+        domain: normalizedDomain,
+        language: languageName,
+        faviconPath: selectedFaviconPath,
+        logoPath: selectedLogoAsset?.webPath,
+      });
+      files['terms.html'] = injectEnhancements(normalizeImageTags(termsResult.html, allImagePoolGlobal.length ? allImagePoolGlobal : siteImagePool, [selectedLogoAsset?.webPath || '', selectedFaviconPath || '']));
+    } catch (e) {
+      console.warn('generateTermsPageHtml failed. Inserting minimal fallback.');
+      files['terms.html'] = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">` +
+        `<title>Terms & Conditions - ${title}</title><script src=\"https://cdn.tailwindcss.com\"></script></head><body>` +
+        `<main class=\"max-w-3xl mx-auto p-6\"><h1 class=\"text-3xl font-bold mb-4\">Terms & Conditions</h1>` +
+        `<p>This platform is intended for adult audiences (18+) and offers entertainment-only social gaming. No real-money play, deposits, or cash prizes.</p>` +
+        `</main></body></html>`;
+    }
     
-    // Add used images
-    console.log(`Adding ${usedImagePaths.size} used images to the files object...`);
-    for (const webPath of usedImagePaths) {
+    // Add used images (and include the rest of our library as safe fallback)
+    const allLibImages: string[] = Array.isArray((manifest as any).images) ? (manifest as any).images : [];
+    const packAllImages = String(process.env.WG_PACK_ALL_IMAGES || '').toLowerCase() === 'true' || process.env.WG_PACK_ALL_IMAGES === '1';
+    let imagesToPack = new Set<string>(packAllImages ? [...usedImagePaths, ...allLibImages] : [...usedImagePaths]);
+    // Safety: if AI разметка почти не использовала изображения — возьми весь пул, чтобы на сайте точно были картинки
+    if (imagesToPack.size === 0 && allLibImages.length > 0) {
+      imagesToPack = new Set<string>(allLibImages);
+    }
+    console.log(`Adding ${imagesToPack.size} images to the files object... (packAll=${packAllImages})`);
+    for (const webPath of imagesToPack) {
       const localPath = path.join(publicDir, webPath);
       try {
         files[webPath] = await fs.promises.readFile(localPath);
@@ -1484,7 +1534,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
     }
 
     const elapsedMs = Date.now() - startedAt;
-    console.log(`Generation successful! Main sections: ${mainSections.length}, legal sections: ${legalSections.length}, elapsed ${Math.round(elapsedMs / 100) / 10}s`);
+    console.log(`Generation successful! Main sections: ${mainSections.length}, elapsed ${Math.round(elapsedMs / 100) / 10}s`);
     const usage: TokenUsageSummary = {
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
@@ -1496,6 +1546,24 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
 
   } catch (error) {
     console.error(`Fatal generation error for prompt "${prompt}":`, error);
-    return null;
+    // Robust fallback: always return a minimal site so UI doesn't fail
+    const safeTitle = siteName?.trim() || 'My Website';
+    const indexHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${safeTitle}</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-950 text-slate-100">
+    <header class="sticky top-0 bg-slate-900/80 backdrop-blur border-b border-slate-800"><div class="max-w-6xl mx-auto p-4 flex items-center justify-between"><strong>${safeTitle}</strong><nav class="text-sm space-x-4"><a href="#about" class="hover:text-sky-400">About</a><a href="#features" class="hover:text-sky-400">Features</a><a href="privacy-policy.html" class="hover:text-sky-400">Privacy</a><a href="terms.html" class="hover:text-sky-400">Terms</a></nav></div></header>
+    <main class="max-w-6xl mx-auto p-6">
+      <section id="hero" class="py-16"><h1 class="text-4xl font-bold">${safeTitle}</h1><p class="mt-3 opacity-80">Entertainment-only demo site. 18+ only. No real-money play, deposits or prizes.</p></section>
+      <section id="about" class="py-10"><h2 class="text-2xl font-semibold">About</h2><p class="opacity-80">Unique social experience built by AI.</p></section>
+      <section id="features" class="py-10"><h2 class="text-2xl font-semibold">Features</h2><ul class="list-disc ml-6 opacity-80"><li>Free-to-play</li><li>Modern responsive UI</li><li>Cookie consent</li></ul></section>
+    </main>
+    <section class="bg-slate-900 border-t border-slate-800 p-6 text-sm opacity-80"><p>This is a social gaming concept for an adult audience (18+) for amusement only. No real-money gambling or prizes.</p></section>
+    </body></html>`;
+    const termsHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terms & Conditions - ${safeTitle}</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-950 text-slate-100"><main class="max-w-3xl mx-auto p-6"><h1 class="text-3xl font-bold mb-4">Terms & Conditions</h1><p class="opacity-90">You must be 18+ to use this site. This is an entertainment-only social experience; no deposits, no real-money gambling, no prizes.</p></main></body></html>`;
+    const privacyHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Privacy Policy - ${safeTitle}</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-slate-950 text-slate-100"><main class="max-w-3xl mx-auto p-6"><h1 class="text-3xl font-bold mb-4">Privacy Policy</h1><p class="opacity-90">We keep data collection minimal and only for essential functionality (e.g., cookie consent). You can contact us to request updates or deletion.</p></main></body></html>`;
+    const files: Record<string, Buffer | string> = {
+      'index.html': indexHtml,
+      'terms.html': termsHtml,
+      'privacy-policy.html': privacyHtml,
+    };
+    return { domain: deriveDomainName({ domain: siteName, types: websiteTypes }, siteName, safeTitle), files, history: [...history, prompt], types: websiteTypes };
   }
 }

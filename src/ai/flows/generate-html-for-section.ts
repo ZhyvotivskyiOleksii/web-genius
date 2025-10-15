@@ -1,5 +1,4 @@
-// Файл: src/ai/flows/generate-html-for-section.ts
-'use server';
+"use server";
 
 import { ai, getAI } from '@/ai/genkit';
 import { MODEL_NAME } from '@/ai/model';
@@ -11,13 +10,19 @@ const SectionHtmlInputSchema = z.object({
     title: z.string(),
     details: z.string().optional(),
   }),
-  sitePrompt: z.string().describe("Оригінальний запит користувача, який описує сайт"),
+  sitePrompt: z.string().describe('Оригінальний запит користувача, який описує сайт'),
+  creativeBrief: z.string().describe('Творчий бриф з візуальним стилем сайту'),
   theme: z.object({
     primaryColor: z.string(),
   }),
-  imageUrl: z.string().optional().describe("URL випадкового зображення, яке потрібно вставити"),
-  imageUrls: z.array(z.string()).optional().describe("Колекція унікальних зображень для секції"),
-  styleHint: z.string().optional().describe("Тематична підказка для фону, анімацій чи паралаксу"),
+  imageUrl: z.string().optional().describe('URL випадкового зображення, яке потрібно вставити'),
+  imageUrls: z.array(z.string()).optional().describe('Колекція унікальних зображень для секції'),
+  gamePages: z
+    .array(
+      z.object({ title: z.string(), href: z.string(), cover: z.string().optional() })
+    )
+    .optional()
+    .describe('Список сторінок ігор для секції Games (1–4).'),
   language: z.string().optional(),
   themeMode: z.enum(['light', 'dark']).optional(),
   ctaTarget: z.string().optional(),
@@ -32,6 +37,7 @@ const UsageSchema = z.object({
 
 const SectionHtmlOutputSchema = z.object({
   htmlContent: z.string(),
+  cssContent: z.string().optional(), // This is legacy, we don't use it but keep for schema compatibility
 });
 export type SectionHtml = z.infer<typeof SectionHtmlOutputSchema>;
 
@@ -41,63 +47,50 @@ const SectionHtmlFlowOutputSchema = SectionHtmlOutputSchema.extend({
 });
 export type SectionHtmlFlowResult = z.infer<typeof SectionHtmlFlowOutputSchema>;
 
-const sectionPrompt = ai.definePrompt({
-  name: 'sectionHtmlPrompt',
-  input: { schema: SectionHtmlInputSchema },
-  output: { schema: SectionHtmlOutputSchema },
-  prompt: `Ты — элитный фронтенд-разработчик, мастер TailwindCSS. Создай HTML-код для одной секции сайта.
-- НЕ используй \`<html>\`, \`<body>\`, \`<style>\` теги. Только HTML-код для секции.
-- Используй семантические теги (\`<section>\`, \`<h2>\`, и т.д.).
-- Сделай дизайн современным, адаптивным и красивым.
-- Используй акцентный цвет: \`{{theme.primaryColor}}\`.
-- Основывай контент и визуальные мотивы на брифе пользователя: "{{sitePrompt}}". В каждой секции явно упоминай ключевые идеи из этого описания (тематика, география, целевая аудитория, особенности сервиса).
-- Учитывай режим темы: если \`{{themeMode}}\` = 'light', применяй светлые фоны и тёмный текст; если 'dark' — наоборот, оставляй глубокие тёмные фоны и светлый текст.
-- Тримай фон секції нейтральним: не використовуй класи Tailwind \`bg-gradient-*\`, \`from-*\`, \`via-*\`, \`to-*\` і не додавай інлайнові градієнти чи кислотні заливки.
-- Основний текст не роби напівпрозорим: жодних \`opacity-*\` для абзаців чи заголовків, щоб контраст залишався високим.
-- Якщо тип секції 'hero', створи компактний рядок над заголовком з класом \`headline-kicker\`, а головний заголовок оформи як \`<h1 class="hero-headline">...\`. Щонайменше одне слово обгорни у \`<span class="headline-highlight">...</span>\` для акценту. Текст заголовка має бути uppercase.
-- **ВАЖНО: Главному тегу <section> ОБЯЗАТЕЛЬНО добавь id, равный типу секции. Пример: \`<section id="{{section.type}}">\`.**
-- **Если тип секции 'hero', сделай её полноэкранной, добавив классы \`min-h-screen flex flex-col justify-center\`**.
-- **Пиши весь текст секции строго на языке {{#if language}}{{language}}{{else}}пользовательского запроса{{/if}} (заголовки, кнопки, описи).**
-- **Никогда не генерируй собственные теги header, nav, footer или глобальные меню внутри секции — эти блоки уже есть в макете.**
-- **Все кнопки и CTA делай ссылками с реальным адресом (никаких пустых или заглушек в href).**
-{{#if ctaTarget}}- **Главный CTA (первый по смыслу) обязательно использует href="{{ctaTarget}}". Не оставляй \`href="#"\`, не подменяй адрес внешними ссылками.**{{/if}}
-- Для кнопок и основних лінків використовуй заготовлені класи: головний CTA — \`btn-primary\`, додаткові дії — \`btn-secondary\`. Це звичайні <a> з атрибутом href.
-- Не додавай до них класів виду \`text-*\` чи власних inline-стилів кольору, залишай контраст за замовчуванням.
-- Використовуй лише іконки Font Awesome 6 (клас \`fa-solid\`). Обгорни кожну іконку у \`<div class="icon-badge">\` та розмісти саму іконку у тегу \`<i class="fa-solid fa-..."></i>\`. Ніяких емодзі чи випадкових SVG.
-- Тримай типографіку чистою: жодних градієнтів усередині тексту, заголовки мають мати чіткий контраст з фоном.
-- Фони секцій — акуратні, з делікатними шарами (легкий градієнт, soft-glow, сітка 5–10% прозорості). Уникай кислотних або перенасичених заливок.
-- Для карток та списків підтримуй однакову сітку відступів: використовуйте flex або grid з \`gap\`, не застосовуй великі тіні без потреби.
-- Это социальная демо-платформа без реальных ставок и выигрышей. Никогда не используй выражения про деньги, джекпоты, ставки, бонусы, депозиты, выплаты, лотереи или реальный выигрыш. Делай акцент на развлекательном опыте, коллекциях, челленджах и бесплатных демо-спинах.
-- Строй фоны рівня преміум за рахунок акуратних декоративних шарів (не більше 2-3), м'яких світлових плям, сіток, легкого паралаксу.
+// FIXED: Prompt is now in Ukrainian for consistency.
+const SECTION_PROMPT_TEMPLATE = `Ти — елітний фронтенд-розробник і креативний дизайнер, майстер TailwindCSS. Твоє завдання — створити HTML-код для ОДНІЄЇ секції сайту.
 
-{{#if styleHint}}
-Використай наступну творчу підказку для оформлення секції: "{{styleHint}}". Додай відповідні фонові ефекти (градієнти, паралакс, рухомі елементи, SVG-патерни, canvas-ефекти) або декоративні шари, щоб секція виглядала унікально.
+Головний орієнтир — творчий бриф:
+"{{creativeBrief}}"
+
+Правила:
+- НЕ використовуй теги <html>, <body>, <style>. Поверни лише HTML-код секції.
+- Головному тегу <section> додай id відповідно до типу секції: <section id="{{section.type}}">.
+- Якщо тип секції 'hero' — зроби її повноекранною (min-h-screen).
+- Весь текст пиши мовою: {{#if language}}{{language}}{{else}}мовою запиту користувача{{/if}}.
+- Жодних header/nav/footer всередині секцій.
+ - Додавай мікроанімації: плавні появи елементів, hover‑ефекти карток, легкі паралакси для декоративних шарів.
+ - Для елементів, які мають з'являтися при прокрутці, додай клас 'reveal-on-scroll'. Для декоративних шарів можеш додати data-parallax="0.1..0.3".
+
+Контент базуй на загальному запиті ("{{sitePrompt}}") та деталях секції.
+Якщо є зображення (imageUrls), ОБОВ'ЯЗКОВО встав їх органічно відповідно до брифу. Не використовуй зовнішні "placeholder"‑картинки.
+{{#if imageUrls}}
+  Доступні зображення для цієї секції:
+  {{#each imageUrls}}
+  - {{this}}
+  {{/each}}
 {{/if}}
 
-{{#if imageUrls}}
-У тебя есть подборка унікальних зображень (без повторів):
-{{#each imageUrls}}
-- {{this}}
-{{/each}}
-Розподіли їх між картками/блоками секции так, чтобы каждая картинка использовалась только один раз. Если секция содержит галерею, карточки или список — ставь отдельное изображение на каждый элемент.
-**Кожне зображення потрібно додати через явний тег img з атрибутом src="..." (не лише фоново). Заборонено залишати картинки невикористаними чи дублювати одні й ті самі шляхи в кількох картках.**
-{{else if imageUrl}}**ОБЯЗАТЕЛЬНО ИСПОЛЬЗУЙ ЭТО ИЗОБРАЖЕНИЕ:** \`{{imageUrl}}\`. Вставь его в тег img з атрибутом src=\"{{imageUrl}}\". Придумай осмысленный alt-текст, що описує типове зображення для казино (наприклад, \"Яскравий ігровий автомат у казино\").{{/if}}
+Якщо є gamePages і тип секції підходить ('games', 'gallery', 'cards') — відмалюй сітку карток (1–4) з обкладинками та посиланнями на href:
+{{#if gamePages}}
+  Доступні ігрові сторінки:
+  {{#each gamePages}}
+  - {{this.title}} => {{this.href}} {{#if this.cover}}(обкладинка: {{this.cover}}){{/if}}
+  {{/each}}
+{{/if}}
 
-- Если используешь иконки, убедись, что они явно видны на фоні: додай контрастні класи (наприклад, text-white або text-slate-900), тіні чи світіння. Кожна карточка/фіча повинна мати власну іконку (Font Awesome, Material Symbols чи емодзі).
+Вимоги до зображень та анімацій:
+- Для секцій типу 'gallery' або 'games' розмісти сітку з 6–12 картками з <img>, використовуючи лише надані imageUrls.
+- Для 'features'/'about' додай хоча б 1–2 зображення.
+- Додай легкі анімації без сторонніх бібліотек: hover‑ефекти карток (scale/opacity/translate), м'які появи елементів через CSS (utility‑класи Tailwind або прості keyframes).
 
-// Правила чистого текста и иконок
-- Категорически запрещены эмодзи и любые Unicode‑пиктограммы в тексте и атрибутах. Используй только иконки FA: <i class='fa-solid fa-sparkles'></i>, <i class='fa-solid fa-bolt'></i> и т.п.
-- Не добавляй <script> и инлайновый JS в секции.
+Завдання:
+- Тип секції: {{section.type}}
+- Заголовок: {{section.title}}
+- Деталі: {{section.details}}
 
-**Задание:**
-- Тип секции: \`{{section.type}}\`
-- Заголовок: \`{{section.title}}\`
-- Детали: \`{{section.details}}\`
+Поверни JSON з полем htmlContent.`;
 
-Выдай только HTML-код в поле "htmlContent" JSON-ответа.`,
-});
-
-// Genkit-флоу
 export const generateHtmlForSection = ai.defineFlow(
   {
     name: 'generateHtmlForSection',
@@ -110,36 +103,13 @@ export const generateHtmlForSection = ai.defineFlow(
       name: 'sectionHtmlPromptDynamic',
       input: { schema: SectionHtmlInputSchema },
       output: { schema: SectionHtmlOutputSchema },
-      prompt: `Ты — элитный фронтенд-разработчик, мастер TailwindCSS. Создай HTML-код для одной секции сайта.
-- НЕ используй \`<html>\`, \`<body>\`, \`<style>\` теги. Только HTML-код для секции.
-- Используй семантические теги (\`<section>\`, \`<h2>\`, и т.д.).
-- Сделай дизайн современным, адаптивным и красивым.
-- Используй акцентный цвет: \`{{theme.primaryColor}}\`.
-- Основывай контент и визуальные мотивы на брифе пользователя: "{{sitePrompt}}". В каждой секции явно упоминай ключевые идеи из этого описания (тематика, география, целевая аудитория, особенности сервиса).
-- Учитывай режим темы: если \`{{themeMode}}\` = 'light', применяй светлые фоны и тёмный текст; если 'dark' — наоборот, оставляй глубокие тёмные фоны и светлый текст.
-- Тримай фон секції нейтральним: не використовуй класи Tailwind \`bg-gradient-*\`, \`from-*\`, \`via-*\`, \`to-*\` і не додавай інлайнові градієнти чи кислотні заливки.
-- Основний текст не роби напівпрозорим: жодних \`opacity-*\` для абзаців чи заголовків, щоб контраст залишався високим.
-- Якщо тип секції 'hero', створи компактний рядок над заголовком з класом \`headline-kicker\`, а головний заголовок оформи як \`<h1 class="hero-headline">...\`. Щонайменше одне слово обгорни у \`<span class="headline-highlight">...</span>\` для акценту. Текст заголовка має бути uppercase.
-- **ВАЖНО: Главному тегу <section> ОБЯЗАТЕЛЬНО добавь id, равный типу секции. Пример: \`<section id="{{section.type}}">\`.**
-- **Если тип секции 'hero', сделай её полноэкранной, добавив классы \`min-h-screen flex flex-col justify-center\`**.
-- **Пиши весь текст секции строго на языке {{#if language}}{{language}}{{else}}пользовательского запроса{{/if}} (заголовки, кнопки, описи).**
-- **Никогда не генерируй собственные теги header, nav, footer или глобальные меню внутри секции — эти блоки уже есть в макете.**
-- **Все кнопки и CTA делай ссылками с реальным адресом (никаких пустых или заглушек в href).**
-{{#if ctaTarget}}- **Главный CTA (первый по смыслу) обязательно использует href="{{ctaTarget}}". Не оставляй \`href=\"#\"\`, не подменяй адрес внешними ссылками.**{{/if}}
-- Для кнопок и основних лінків використовуй заготовлені класи: головний CTA — \`btn-primary\`, додаткові дії — \`btn-secondary\`.
-- Не додавай до них класів виду \`text-*\` чи inline-стилів кольору — контраст залишаємо типовий.
-- Це соціальна демо‑платформа без реальних ставок і виграшів.
-
-**Задание:**
-- Тип секции: \`{{section.type}}\`
-- Заголовок: \`{{section.title}}\`
-- Детали: \`{{section.details}}\` 
-
-Выдай только HTML-код в поле "htmlContent" JSON-ответа.`,
+      prompt: SECTION_PROMPT_TEMPLATE,
     });
     const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
     let lastErr: any = null;
-    for (let attempt = 1; attempt <= 3; attempt++) {
+    const fastMode = String(process.env.WG_FAST || '').toLowerCase() === 'true' || process.env.WG_FAST === '1';
+    const maxAttempts = fastMode ? 2 : (input.model && input.model.includes('flash') ? 3 : 5);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const response = await localPrompt(input);
         const output = response.output;
@@ -153,41 +123,21 @@ export const generateHtmlForSection = ai.defineFlow(
         throw new Error('Empty model output');
       } catch (e: any) {
         lastErr = e;
-        const backoff = Math.min(3200, 600 * attempt);
-        await sleep(backoff);
+        await sleep(Math.min(1600, 400 * attempt));
       }
     }
-    const escapeHtml = (value: string) =>
-      value
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    const summarizePrompt = (raw: string) => {
-      const normalized = (raw || '').replace(/\s+/g, ' ').trim();
-      if (!normalized) return '';
-      if (normalized.length <= 180) return normalized;
-      return `${normalized.slice(0, 177)}...`;
-    };
-    const safeTitle = escapeHtml(input.section.title || input.section.type || 'Section');
-    const safeDetails = input.section.details ? escapeHtml(input.section.details) : '';
-    // Додаємо id також у резервний HTML для надійності
-    const isLight = input.themeMode === 'light';
-    const baseText = isLight ? 'text-slate-800' : 'text-white';
-    const subText = isLight ? 'text-slate-600' : 'text-slate-300';
-    const bg = isLight ? 'bg-white/80' : 'bg-white/10 backdrop-blur';
-    const promptSummary = summarizePrompt(input.sitePrompt || '');
-    const promptBlock = promptSummary ? `<p class="${subText} mt-3">${escapeHtml(promptSummary)}</p>` : '';
-    const htmlFallback = `
-<section class="py-12 ${bg}" id="${input.section.type || 'fallback'}">
-  <div class="max-w-5xl mx-auto px-4">
-    <h2 class="text-3xl font-bold mb-4 ${baseText}">${safeTitle}</h2>
-    ${safeDetails ? `<p class="${subText}">${safeDetails}</p>` : ''}
-    ${promptBlock}
+
+    const esc = (v: string) => v.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const safeTitle = esc(input.section.title || input.section.type || 'Section');
+    const safeDetails = input.section.details ? esc(input.section.details) : '';
+    const htmlFallback = `<section id="${input.section.type || 'section'}" class="py-12 bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <h2 class="text-3xl font-bold mb-4">${safeTitle}</h2>
+    ${safeDetails ? `<p class="text-slate-500">${safeDetails}</p>` : ''}
+    <p class="mt-4 text-red-500">Error: AI failed to generate this section. This is a fallback content.</p>
   </div>
 </section>`;
     console.error('generateHtmlForSection: fallback used due to error:', lastErr?.message || lastErr);
-    return { htmlContent: htmlFallback, model: MODEL_NAME };
+    return { htmlContent: htmlFallback, cssContent: '', model: MODEL_NAME };
   }
 );

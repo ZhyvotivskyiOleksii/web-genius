@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useActionState } from 'react';
+import React, { useEffect, useState, useActionState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -102,6 +102,8 @@ export function SiteGeneratorForm({ formAction, isPending, state, modelName, onS
       setModel(modelName || 'googleai/gemini-2.5-flash');
     }
   }, [modelName]);
+
+  // No ETA/timer logic — keep UI simple and responsive
 
   return (
     <div className="w-full max-w-2xl">

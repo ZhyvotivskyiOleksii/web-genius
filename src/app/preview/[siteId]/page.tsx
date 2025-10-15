@@ -109,7 +109,25 @@ const safeStorePreviewCache = (siteId: string, files: Record<string, string>) =>
 
 function buildHtml(files: Record<string, string>, path: string) {
   const { file: filePath, hash: fragment } = splitPreviewTarget(path);
-  const html = files[filePath] || files['index.html'] || '<!doctype html><title>Preview</title>';
+  let html = files[filePath] || files['index.html'] || '<!doctype html><title>Preview</title>';
+  // If content looks like a bare script or too small to be a page, wrap into a minimal HTML shell
+  const looksBare = (s: string) => {
+    const t = (s || '').trim();
+    if (t.length < 32) return true;
+    const hasMarkup = /<html|<body|<head|<section|<div/i.test(t);
+    const onlyScriptOrText = /^\s*<script[\s>]/i.test(t) || (!hasMarkup && /^[\(\{A-Za-z]/.test(t));
+    return !hasMarkup && onlyScriptOrText;
+  };
+  if (looksBare(html)) {
+    const t = (html || '').trim();
+    const scriptLike = /^(?:\(function|function\s|var\s|let\s|const\s|window\.|document\.|\()/i.test(t);
+    if (scriptLike) {
+      const safe = t.replace(/<\/script>/gi, '<\\/script>');
+      html = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Preview</title></head><body><script>${safe}</script></body></html>`;
+    } else {
+      html = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>Preview</title></head><body>${t}</body></html>`;
+    }
+  }
   let processed = html;
   processed = processed.replace(/<script src="scripts\/main.js"><\/script>/, `<script>${files['scripts/main.js'] || ''}<\/script>`);
   processed = processed.replace(/<link rel="stylesheet" href="styles\/style.css">/, `<style>${files['styles/style.css'] || ''}<\/style>`);
@@ -146,8 +164,20 @@ function buildHtml(files: Record<string, string>, path: string) {
       /(href|src)='(games\/[^']+)'/g,
       (_match, attr, path) => `${attr}='/${path}'`
     );
+  // Also normalize local image paths to absolute from public
+  processed = processed
+    .replace(
+      /(href|src)=\"(images\/[^\"]+)\"/g,
+      (_match, attr, path) => `${attr}="/${path}"`
+    )
+    .replace(
+      /(href|src)='(images\/[^']+)'/g,
+      (_match, attr, path) => `${attr}='/${path}'`
+    );
 
   const routerScript = `\n<script>(function(){document.addEventListener('click',function(e){var a=e.target&&(e.target.closest?e.target.closest('a[data-preview-path]'):null);if(!a)return;e.preventDefault();if(typeof e.stopImmediatePropagation==='function'){e.stopImmediatePropagation();}else if(typeof e.stopPropagation==='function'){e.stopPropagation();}var p=a.getAttribute('data-preview-path');if(p&&window.parent){window.parent.postMessage({type:'open-path',path:p},'*');}},true);})();</script>`;
+  const anchorScrollScript = `\n<script>(function(){document.addEventListener('click',function(e){try{var a=e.target&&(e.target.closest?e.target.closest('a[href^="#"]'):null);if(!a)return;var href=a.getAttribute('href')||'';if(href.length<2)return;e.preventDefault();var id=decodeURIComponent(href.slice(1));var el=document.getElementById(id);if(el&&el.scrollIntoView){el.scrollIntoView({behavior:'smooth'});}var mm=document.getElementById('mobile-menu');if(mm){mm.style.display='none';mm.style.opacity='0';mm.style.pointerEvents='none';}if(document.body){document.body.classList.remove('overflow-hidden');}}catch(_){}},true);})();</script>`;
+  const safetyMenuScript = `\n<script>(function(){function closeMenu(){try{var mm=document.getElementById('mobile-menu');if(mm){mm.style.display='none';mm.style.opacity='0';mm.style.pointerEvents='none';mm.classList.remove('open','visible','show','active');}if(document.body){document.body.classList.remove('overflow-hidden');}}catch(_){} }if(document.readyState!=='loading'){closeMenu();}else{document.addEventListener('DOMContentLoaded',closeMenu);}window.addEventListener('hashchange',closeMenu);})();</script>`;
   const extraScripts: string[] = [routerScript];
   if (fragment) {
     const safeHash = fragment
@@ -158,7 +188,7 @@ function buildHtml(files: Record<string, string>, path: string) {
     const hashScript = `\n<script>(function(){try{var hash='${safeHash}';if(hash&&hash.length>1){if(hash.charAt(0)==='#'){hash=hash.slice(1);}if(hash){location.hash=hash;}}}catch(err){}})();</script>`;
     extraScripts.push(hashScript);
   }
-  const scriptBundle = extraScripts.join('');
+  const scriptBundle = [routerScript, anchorScrollScript, safetyMenuScript, ...extraScripts].join('');
   if (/<\/body>/i.test(processed)) {
     processed = processed.replace(/<\/body>/i, `${scriptBundle}</body>`);
   } else {

@@ -298,23 +298,54 @@ export default function Home() {
             id = created?.id;
           }
           if (!id) { setShowPreview(true); return; }
-          // Bulk upsert files
+          // Cache to sessionStorage with safety limits to avoid QuotaExceeded
           const cacheKey = `wg-cache-${id}`;
           if (typeof window !== 'undefined') {
             try {
-              sessionStorage.setItem(cacheKey, JSON.stringify({
+              const DATA_URI_CACHE_THRESHOLD = 120_000; // более строгий порог
+              const PLACEHOLDER = '';
+              const sanitizedFiles: Record<string, string> = {};
+              for (const [k, v] of Object.entries(state.site.files)) {
+                // Сохраняем минимально: для games/* и images/* кладем пустую строку, чтобы дерево было видно, но без веса
+                if (k.startsWith('games/') || k.startsWith('images/')) {
+                  sanitizedFiles[k] = '';
+                  continue;
+                }
+                const sv = String(v || '');
+                if (sv.startsWith('data:') && sv.length > DATA_URI_CACHE_THRESHOLD) {
+                  sanitizedFiles[k] = PLACEHOLDER;
+                } else {
+                  sanitizedFiles[k] = sv;
+                }
+              }
+              const payload = JSON.stringify({
                 domain: state.site.domain,
-                files: state.site.files,
+                files: sanitizedFiles,
                 history: state.site.history,
                 types: state.site.types || [],
                 usage: state.site.usage,
-              }));
+              });
+              sessionStorage.setItem(cacheKey, payload);
             } catch (cacheErr) {
               console.warn('Failed to cache freshly generated site:', cacheErr);
             }
           }
 
-          const rows = Object.entries(state.site.files).map(([path, content]) => ({ site_id: id!, path, content: String(content || ''), updated_by: userId }));
+          // Persist only lightweight, текстовые и ключевые image-файлы. Пропускаем games/ и тяжелые data:URI.
+          const TEXT_EXT = new Set(['html','htm','css','js','ts','tsx','json','md','svg','txt']);
+          const IMAGE_EXT = new Set(['png','jpg','jpeg','webp','avif','gif','svg','ico']);
+          const rows = Object.entries(state.site.files)
+            .filter(([p]) => !p.startsWith('games/'))
+            .filter(([p, c]) => {
+              const ext = (p.split('.').pop() || '').toLowerCase();
+              const isText = TEXT_EXT.has(ext);
+              const isImage = p.startsWith('images/') && IMAGE_EXT.has(ext);
+              if (!isText && !isImage) return false;
+              // Ограничение: слишком большие data:URI не пишем в БД
+              if (typeof c === 'string' && c.startsWith('data:') && c.length > 240_000) return false;
+              return true;
+            })
+            .map(([path, content]) => ({ site_id: id!, path, content: String(content || ''), updated_by: userId }));
           if (rows.length) {
             const chunkSize = 40;
             for (let i = 0; i < rows.length; i += chunkSize) {

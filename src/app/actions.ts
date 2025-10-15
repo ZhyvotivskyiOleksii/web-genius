@@ -532,13 +532,80 @@ export async function downloadZipAction(siteData: { domain: string, files: Recor
         const folder = zip.folder(siteData.domain);
 
         if (folder) {
-            for (const [path, content] of Object.entries(siteData.files)) {
-                if (content.startsWith('data:')) {
-                    const base64Data = content.split(',')[1];
-                    folder.file(path, base64Data, { base64: true });
-                } else {
-                    folder.file(path, content);
-                }
+            const stripPreviewArtifacts = (html: string): string => {
+              try {
+                if (!html || typeof html !== 'string') return html;
+                const patterns: RegExp[] = [
+                  /<script[^>]*>[\s\S]*?postMessage\(\{\s*type:\s*['\"]open-path['\"][\s\S]*?<\/script>/gi,
+                  /<script[^>]*>[\s\S]*?data-preview-path[\s\S]*?<\/script>/gi,
+                  /<script[^>]*>[\s\S]*?wg-set-inspector[\s\S]*?<\/script>/gi,
+                  /<script[^>]*>[\s\S]*?wg-hover-highlight[\s\S]*?<\/script>/gi,
+                ];
+                let out = html;
+                for (const rx of patterns) out = out.replace(rx, '');
+                return out;
+              } catch { return html; }
+            };
+            const referencedAssets = new Set<string>();
+            const addFile = (p: string, c: string) => {
+              if (/\.html?$/i.test(p)) {
+                c = stripPreviewArtifacts(c);
+              }
+              if (c.startsWith('data:')) {
+                const base64Data = c.split(',')[1];
+                folder.file(p, base64Data, { base64: true });
+              } else {
+                folder.file(p, c);
+              }
+            };
+            // 1) Add provided files and collect referenced images/games
+            for (const [pathKey, content] of Object.entries(siteData.files)) {
+              addFile(pathKey, content);
+              if (/\.html?$/i.test(pathKey)) {
+                const html = content || '';
+            const rx = /(src|href)=("|')(images\/[^"]+?)\2/gi;
+            let m: RegExpExecArray | null;
+            while ((m = rx.exec(html))) {
+              referencedAssets.add(m[3]);
+            }
+            const rxGames = /(src|href)=("|')(games\/[^"']+?)\2/gi;
+            while ((m = rxGames.exec(html))) {
+              referencedAssets.add(m[3]);
+            }
+              }
+            }
+            // 2) Attach missing referenced images from public/
+            const basePublic = path.join(process.cwd(), 'public');
+            for (const asset of referencedAssets) {
+              if (siteData.files[asset]) continue; // already present
+              try {
+                const disk = path.join(basePublic, asset);
+                const buf = await fs.readFile(disk);
+                folder.file(asset, buf);
+              } catch {}
+            }
+            // 3) If any game folders referenced, include their contents
+            for (const asset of referencedAssets) {
+              const m = asset.match(/^games\/([^\/]+)\//);
+              if (!m) continue;
+              const gameFolder = m[1];
+              const gameDir = path.join(basePublic, 'games', gameFolder);
+              try {
+                const walk = async (dir: string, rel: string = '') => {
+                  const entries = await fs.readdir(dir, { withFileTypes: true });
+                  for (const ent of entries) {
+                    const p = path.join(dir, ent.name);
+                    const r = path.join(rel, ent.name);
+                    if (ent.isDirectory()) {
+                      await walk(p, r);
+                    } else {
+                      const buf = await fs.readFile(p);
+                      folder.file(path.posix.join('games', gameFolder, r.split(path.sep).join('/')), buf);
+                    }
+                  }
+                };
+                await walk(gameDir);
+              } catch {}
             }
         }
         
@@ -627,7 +694,7 @@ export async function testCpanelConnectionAction(prev: any, formData: FormData):
 const editCodeSchema = z.object({
   fileName: z.string(),
   code: z.string(),
-  prompt: z.string(),
+  prompt: z.string().min(3, 'Prompt must be at least 3 characters long.'),
   userId: z.string().min(1),
   siteId: z.string().min(1),
   model: z.string().optional(),
@@ -637,7 +704,7 @@ const editElementSchema = z.object({
   fileName: z.string(),
   fileCode: z.string(),
   elementHtml: z.string(),
-  prompt: z.string(),
+  prompt: z.string().min(3, 'Prompt must be at least 3 characters long.'),
   userId: z.string().min(1),
   siteId: z.string().min(1),
   cssContent: z.string().optional().nullable(),
@@ -649,10 +716,12 @@ const editElementSchema = z.object({
 });
 
 export async function editCodeAction(prevState: any, formData: FormData) {
+  // Support a backup prompt field to avoid race with controlled input clearing
+  const rawPrompt = (formData.get('prompt') || formData.get('prompt_backup') || '').toString();
   const validatedFields = editCodeSchema.safeParse({
     fileName: formData.get('fileName'),
     code: formData.get('code'),
-    prompt: formData.get('prompt'),
+    prompt: rawPrompt,
     userId: formData.get('userId'),
     siteId: formData.get('siteId'),
     model: formData.get('model') || undefined,
@@ -715,20 +784,26 @@ export async function editCodeAction(prevState: any, formData: FormData) {
     };
   } catch (error) {
     console.error('Code editing failed:', error);
+    const errMsg = (error && (error as any).message)
+      ? String((error as any).message)
+      : typeof error === 'string'
+        ? error
+        : 'An unexpected error occurred during code editing.';
     return {
       success: false,
-      error: 'An unexpected error occurred during code editing.',
+      error: errMsg,
       response: null,
     };
   }
 }
 
 export async function editElementAction(prevState: any, formData: FormData) {
+  const rawElementPrompt = (formData.get('prompt') || formData.get('prompt_backup') || '').toString();
   const validatedFields = editElementSchema.safeParse({
     fileName: formData.get('fileName'),
     fileCode: formData.get('fileCode'),
     elementHtml: formData.get('elementHtml'),
-    prompt: formData.get('prompt'),
+    prompt: rawElementPrompt,
     userId: formData.get('userId'),
     siteId: formData.get('siteId'),
     cssContent: formData.get('cssContent'),
@@ -904,9 +979,14 @@ export async function editElementAction(prevState: any, formData: FormData) {
     };
   } catch (error) {
     console.error('Element editing failed:', error);
+    const errMsg = (error && (error as any).message)
+      ? String((error as any).message)
+      : typeof error === 'string'
+        ? error
+        : 'An unexpected error occurred during code editing.';
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'An unexpected error occurred.',
+      error: errMsg,
       response: null,
     };
   }
@@ -1015,7 +1095,7 @@ export async function editCodeBulkAction(prevState: any, formData: FormData) {
       chat: chatEntry,
     };
   } catch (e: any) {
-    const errorMessage = e instanceof Error ? e.message : 'Bulk edit failed';
+    const errorMessage = (e && (e as any).message) ? String((e as any).message) : (typeof e === 'string' ? e : 'Bulk edit failed');
     console.error('Bulk edit action failed:', e);
     return { success: false, error: errorMessage, results: null, reasoning: null, answer: null };
   }
@@ -1088,17 +1168,82 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
   try {
     const files: Record<string, string> = JSON.parse(parsed.data.files);
 
-    // Build ZIP from files
+    // Build ZIP from files (+ enrich with referenced public assets like images/* and games/*)
     const zip = new JSZip();
-    // Flatten archive: files go to root (no extra top-level folder)
-    for (const [path, content] of Object.entries(files)) {
-      if (content.startsWith('data:')) {
-        const base64Data = content.split(',')[1];
-        zip.file(path, base64Data, { base64: true });
+    const stripPreviewArtifacts = (html: string): string => {
+      try {
+        if (!html || typeof html !== 'string') return html;
+        const patterns: RegExp[] = [
+          /<script[^>]*>[\s\S]*?postMessage\(\{\s*type:\s*['\"]open-path['\"][\s\S]*?<\/script>/gi,
+          /<script[^>]*>[\s\S]*?data-preview-path[\s\S]*?<\/script>/gi,
+          /<script[^>]*>[\s\S]*?wg-set-inspector[\s\S]*?<\/script>/gi,
+          /<script[^>]*>[\s\S]*?wg-hover-highlight[\s\S]*?<\/script>/gi,
+        ];
+        let out = html;
+        for (const rx of patterns) out = out.replace(rx, '');
+        return out;
+      } catch { return html; }
+    };
+    // 1) Add provided files
+    for (const [p, c] of Object.entries(files)) {
+      let content = String(c ?? '');
+      if (/\.html?$/i.test(p)) content = stripPreviewArtifacts(content);
+      if (typeof content === 'string' && content.startsWith('data:')) {
+        const b64 = content.split(',')[1];
+        zip.file(p, b64, { base64: true });
       } else {
-        zip.file(path, content);
+        zip.file(p, content);
       }
     }
+    // 2) Collect referenced assets from HTML and add missing ones from public/
+    try {
+      const referenced = new Set<string>();
+      for (const [p, c] of Object.entries(files)) {
+        if (!/\.html?$/i.test(p)) continue;
+        const html = String(c || '');
+        const rxImg = /(src|href)=("|')(images\/[^"']+?)\2/gi;
+        const rxGame = /(src|href)=("|')(games\/[^"']+?)\2/gi;
+        let m: RegExpExecArray | null;
+        while ((m = rxImg.exec(html))) referenced.add(m[3]);
+        while ((m = rxGame.exec(html))) referenced.add(m[3]);
+      }
+      const basePublic = path.join(process.cwd(), 'public');
+      // images first
+      for (const asset of referenced) {
+        if (!asset.startsWith('images/')) continue;
+        if (files[asset]) continue;
+        try {
+          const disk = path.join(basePublic, asset);
+          const buf = await fs.readFile(disk);
+          zip.file(asset, buf);
+        } catch {}
+      }
+      // games: add entire folder if any file under it referenced
+      const gameFolders = new Set<string>();
+      for (const asset of referenced) {
+        const m = asset.match(/^games\/([^\/]+)/);
+        if (m) gameFolders.add(m[1]);
+      }
+      for (const folder of gameFolders) {
+        const gameDir = path.join(basePublic, 'games', folder);
+        const walk = async (dir: string, rel: string = '') => {
+          try {
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const ent of entries) {
+              const abs = path.join(dir, ent.name);
+              const r = path.join(rel, ent.name);
+              if (ent.isDirectory()) {
+                await walk(abs, r);
+              } else {
+                const buf = await fs.readFile(abs);
+                zip.file(path.posix.join('games', folder, r.split(path.sep).join('/')), buf);
+              }
+            }
+          } catch {}
+        };
+        await walk(gameDir);
+      }
+    } catch {}
     const zipBlobBase64 = await zip.generateAsync({ type: 'base64' });
     const zipBuffer = Buffer.from(zipBlobBase64, 'base64');
 
@@ -1209,7 +1354,8 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
             default: return 'application/octet-stream';
           }
         };
-        for (const [path, content] of Object.entries(files)) {
+        for (const [path, contentRaw] of Object.entries(files)) {
+          const content = /\.html?$/i.test(path) ? stripPreviewArtifacts(String(contentRaw ?? '')) : String(contentRaw ?? '');
           const parts = path.split('/');
           const name = parts.pop() as string;
           const dir = parts.length ? `${docRoot}/${parts.join('/')}` : docRoot;

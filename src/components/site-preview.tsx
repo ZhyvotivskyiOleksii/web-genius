@@ -207,6 +207,66 @@ const toStringContent = (raw: unknown): string => {
   return '';
 };
 
+// Remove preview-only scripts (router, inspector) from HTML before publishing/downloading
+const stripPreviewScripts = (html: string): string => {
+  try {
+    if (!html || typeof html !== 'string') return html;
+    const patterns: RegExp[] = [
+      /<script[^>]*>[\s\S]*?postMessage\(\{\s*type:\s*['\"]open-path['\"][\s\S]*?<\/script>/gi,
+      /<script[^>]*>[\s\S]*?data-preview-path[\s\S]*?<\/script>/gi,
+      /<script[^>]*>[\s\S]*?wg-set-inspector[\s\S]*?<\/script>/gi,
+      /<script[^>]*>[\s\S]*?wg-hover-highlight[\s\S]*?<\/script>/gi,
+    ];
+    let out = html;
+    for (const rx of patterns) out = out.replace(rx, '');
+    return out;
+  } catch {
+    return html;
+  }
+};
+
+// Best-effort MIME guess for common assets
+const guessMimeFromPath = (p: string): string => {
+  const ext = p.split('.').pop()?.toLowerCase() || '';
+  switch (ext) {
+    case 'png': return 'image/png';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'gif': return 'image/gif';
+    case 'webp': return 'image/webp';
+    case 'avif': return 'image/avif';
+    case 'svg': return 'image/svg+xml';
+    case 'ico': return 'image/x-icon';
+    default: return 'application/octet-stream';
+  }
+};
+
+// Convert a Site files map to a JSON-safe string map, encoding binary images as data URLs
+const serializeFilesForTransfer = (files: Record<string, any>): Record<string, string> => {
+  const out: Record<string, string> = {};
+  Object.entries(files).forEach(([p, raw]) => {
+    let val = toStringContent(raw);
+    if (/\.html?$/i.test(p)) {
+      val = stripPreviewScripts(val);
+    }
+    if (typeof val === 'string' && val.startsWith('data:')) {
+      out[p] = val;
+      return;
+    }
+    // If looks like an image and we can access bytes, convert to data URL
+    if (/\.(png|jpe?g|gif|webp|avif|svg|ico)$/i.test(p)) {
+      const bytes = toUint8Array(raw);
+      if (bytes) {
+        const b64 = typeof Buffer !== 'undefined' ? Buffer.from(bytes).toString('base64') : btoa(String.fromCharCode(...Array.from(bytes)));
+        out[p] = `data:${guessMimeFromPath(p)};base64,${b64}`;
+        return;
+      }
+    }
+    out[p] = val;
+  });
+  return out;
+};
+
 const splitPreviewTarget = (raw?: string | null): { file: string; hash: string } => {
   if (typeof raw !== 'string') {
     return { file: 'index.html', hash: '' };
@@ -504,6 +564,30 @@ export function SitePreview({
       setIsTestingConn(false);
     }
   };
+
+  // One-time cleanup: strip preview-only scripts accidentally saved in HTML files (legacy bug)
+  useEffect(() => {
+    try {
+      const cleaned: Record<string, string> = {};
+      let changed = false;
+      Object.entries(site.files).forEach(([p, raw]) => {
+        if (!/\.html?$/i.test(p)) return;
+        const original = toStringContent(raw);
+        const fixed = stripPreviewScripts(original);
+        if (fixed !== original) {
+          cleaned[p] = fixed;
+          changed = true;
+        }
+      });
+      if (changed) {
+        setSite((prev) => ({ ...prev, files: { ...prev.files, ...cleaned } }));
+        if (siteId && userId) {
+          Object.entries(cleaned).forEach(([p, v]) => queueSave(p, v));
+        }
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [publishProgress, setPublishProgress] = useState<number>(0);
   const [publishLog, setPublishLog] = useState<string[]>([]);
   const [publishedUrl, setPublishedUrl] = useState<string | null>(null);
@@ -838,6 +922,22 @@ export function SitePreview({
       (files || []).forEach((file: any) => {
         if (file?.path) map[file.path] = file.content || '';
       });
+      // Enrich file tree with referenced assets (placeholders) so images/games видны в проводнике
+      try {
+        const referenced = new Set<string>();
+        Object.entries(map).forEach(([p, c]) => {
+          if (!/\.html?$/i.test(p)) return;
+          const html = String(c || '');
+          const rxImg = /(src|href)=("|')(images\/[\w\-./]+?)\2/gi;
+          const rxGame = /(src|href)=("|')(games\/[\w\-./]+?)\2/gi;
+          let m: RegExpExecArray | null;
+          while ((m = rxImg.exec(html))) referenced.add(m[3]);
+          while ((m = rxGame.exec(html))) referenced.add(m[3]);
+        });
+        referenced.forEach((asset) => {
+          if (!(asset in map)) map[asset] = '';
+        });
+      } catch {}
       setSite((prev) => ({
         ...prev,
         domain: project.slug || prev.domain,
@@ -897,7 +997,7 @@ export function SitePreview({
     payload.set('token', cpToken);
     payload.set('domain', targetDomain);
     payload.set('docRoot', docRoot);
-    payload.set('files', JSON.stringify(site.files));
+    payload.set('files', JSON.stringify(serializeFilesForTransfer(site.files as any)));
     try {
       const res = await publishToCpanelAction({}, payload as any);
       setIsPublishing(false);
@@ -2319,6 +2419,19 @@ export function SitePreview({
                 .replace(assetPath3, `"${content}"`)
                 .replace(assetPath4, `'${content}'`);
             }
+          } else if (/\.(png|jpe?g|gif|webp|avif|svg|ico)$/i.test(path)) {
+            // Inline binary images for preview if available
+            const bytes = toUint8Array(rawContent);
+            if (bytes) {
+              const b64 = typeof Buffer !== 'undefined' ? Buffer.from(bytes).toString('base64') : btoa(String.fromCharCode(...Array.from(bytes)));
+              const dataUrl = `data:${guessMimeFromPath(path)};base64,${b64}`;
+              const regexSafePath = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const assetPath1 = new RegExp(`\"${regexSafePath}\"`, 'g');
+              const assetPath2 = new RegExp(`'${regexSafePath}'`, 'g');
+              processedHtml = processedHtml
+                .replace(assetPath1, `\"${dataUrl}\"`)
+                .replace(assetPath2, `'${dataUrl}'`);
+            }
           }
         });
 
@@ -2371,12 +2484,24 @@ export function SitePreview({
         processedHtml = processedHtml
           .replace(
             /(href|src)=\"(games\/[^\"]+)\"/g,
-            (_match, attr, path) => `${attr}="/${path}"`
+            (_match, attr, path) => `${attr}="/${path}`+`"`
           )
           .replace(
             /(href|src)='(games\/[^']+)'/g,
             (_match, attr, path) => `${attr}='/${path}'`
-          );
+          )
+          .replace(
+            /(href|src)=\"(images\/[^\"]+)\"/g,
+            (_match, attr, path) => `${attr}="/${path}`+`"`
+          )
+          .replace(
+            /(href|src)='(images\/[^']+)'/g,
+            (_match, attr, path) => `${attr}='/${path}'`
+          )
+          .replace(/href=(\"|')\.?\/?game(?:\/index\.html|\/|\.html)?\1/gi, (m)=>{
+            const firstGame = Object.keys(siteToRender.files).find(p=>/^games\/.+\/game\.html$/.test(p));
+            return firstGame ? `href="/${firstGame}"` : m;
+          });
       } catch (error) {
         console.error('Preview assembly failed, falling back to raw HTML', error);
         processedHtml = htmlContent;
@@ -2849,7 +2974,7 @@ export function SitePreview({
       // Use a safe slug for ZIP filename/folder
       const result = await downloadZipAction({
         domain: slugName,
-        files: site.files as Record<string, string>,
+        files: serializeFilesForTransfer(site.files as any),
       });
 
       if (result.success && result.zip && result.filename) {
@@ -3643,11 +3768,22 @@ export function SitePreview({
                   {activeEditorTab ? (
                     /\.(png|jpe?g|gif|svg|webp|avif|ico)$/i.test(activeEditorTab) ? (
                       <div className="flex h-full items-center justify-center p-4">
-                        <img
-                          src={toStringContent(site.files[activeEditorTab])}
-                          alt={activeEditorTab}
-                          className="max-h-full max-w-full object-contain"
-                        />
+                        {(() => {
+                          const raw = toStringContent(site.files[activeEditorTab]);
+                          const isData = typeof raw === 'string' && raw.startsWith('data:');
+                          const fallback = `/${activeEditorTab.replace(/^\/+/, '')}`;
+                          const src = isData && raw.length > 0 ? raw : fallback;
+                          return (
+                            <img
+                              src={src}
+                              alt={activeEditorTab}
+                              className="max-h-full max-w-full object-contain"
+                              onError={(e) => {
+                                // if public fallback fails, keep broken state silently
+                              }}
+                            />
+                          );
+                        })()}
                       </div>
                     ) : (
                       <Editor
@@ -3946,8 +4082,18 @@ export function SitePreview({
                     // Remember which file is being edited at submission time.
                     setPendingEditFile(activeEditorTab);
                     setPendingOriginalCode((site.files[activeEditorTab] as string) || '');
+                    // Persist current prompt into a hidden backup input to avoid React clearing race conditions
+                    try {
+                      const promptInput = e.currentTarget.elements.namedItem('prompt') as HTMLInputElement | null;
+                      const backup = document.createElement('input');
+                      backup.type = 'hidden';
+                      backup.name = 'prompt_backup';
+                      backup.value = (promptInput?.value || chatPrompt || '').toString();
+                      e.currentTarget.appendChild(backup);
+                    } catch {}
                     handleChatSubmit();
-                    setChatPrompt('');
+                    // Defer clearing input value slightly to ensure the browser serialized the original value
+                    setTimeout(() => setChatPrompt(''), 50);
                   }
                 }}
               >
