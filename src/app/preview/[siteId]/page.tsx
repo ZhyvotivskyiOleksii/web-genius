@@ -178,6 +178,7 @@ function buildHtml(files: Record<string, string>, path: string) {
   const routerScript = `\n<script>(function(){document.addEventListener('click',function(e){var a=e.target&&(e.target.closest?e.target.closest('a[data-preview-path]'):null);if(!a)return;e.preventDefault();if(typeof e.stopImmediatePropagation==='function'){e.stopImmediatePropagation();}else if(typeof e.stopPropagation==='function'){e.stopPropagation();}var p=a.getAttribute('data-preview-path');if(p&&window.parent){window.parent.postMessage({type:'open-path',path:p},'*');}},true);})();</script>`;
   const anchorScrollScript = `\n<script>(function(){document.addEventListener('click',function(e){try{var a=e.target&&(e.target.closest?e.target.closest('a[href^="#"]'):null);if(!a)return;var href=a.getAttribute('href')||'';if(href.length<2)return;e.preventDefault();var id=decodeURIComponent(href.slice(1));var el=document.getElementById(id);if(el&&el.scrollIntoView){el.scrollIntoView({behavior:'smooth'});}var mm=document.getElementById('mobile-menu');if(mm){mm.style.display='none';mm.style.opacity='0';mm.style.pointerEvents='none';}if(document.body){document.body.classList.remove('overflow-hidden');}}catch(_){}},true);})();</script>`;
   const safetyMenuScript = `\n<script>(function(){function closeMenu(){try{var mm=document.getElementById('mobile-menu');if(mm){mm.style.display='none';mm.style.opacity='0';mm.style.pointerEvents='none';mm.classList.remove('open','visible','show','active');}if(document.body){document.body.classList.remove('overflow-hidden');}}catch(_){} }if(document.readyState!=='loading'){closeMenu();}else{document.addEventListener('DOMContentLoaded',closeMenu);}window.addEventListener('hashchange',closeMenu);})();</script>`;
+  const burgerToggleScript = `\n<script>(function(){try{function q(s){return document.querySelector(s);}function openMenu(){var mm=q('#mobile-menu');if(!mm)return;mm.style.display='flex';mm.style.opacity='1';mm.style.pointerEvents='auto';mm.classList.add('open','visible','show','active');if(document.body)document.body.classList.add('overflow-hidden');}function closeMenu(){var mm=q('#mobile-menu');if(!mm)return;mm.style.display='none';mm.style.opacity='0';mm.style.pointerEvents='none';mm.classList.remove('open','visible','show','active');if(document.body)document.body.classList.remove('overflow-hidden');}function toggle(e){if(e&&e.preventDefault)e.preventDefault();var mm=q('#mobile-menu');if(!mm)return;if(mm.style.display==='flex'||mm.classList.contains('open')||mm.classList.contains('visible')||mm.classList.contains('active')){closeMenu();}else{openMenu();}}var btn=q('#burger, [data-burger], button[aria-controls="mobile-menu"], [data-menu-toggle]');if(btn){btn.addEventListener('click',toggle,true);}window.wgCloseMenu=closeMenu;}catch(e){}})();</script>`;
   const extraScripts: string[] = [routerScript];
   if (fragment) {
     const safeHash = fragment
@@ -188,7 +189,7 @@ function buildHtml(files: Record<string, string>, path: string) {
     const hashScript = `\n<script>(function(){try{var hash='${safeHash}';if(hash&&hash.length>1){if(hash.charAt(0)==='#'){hash=hash.slice(1);}if(hash){location.hash=hash;}}}catch(err){}})();</script>`;
     extraScripts.push(hashScript);
   }
-  const scriptBundle = [routerScript, anchorScrollScript, safetyMenuScript, ...extraScripts].join('');
+  const scriptBundle = [routerScript, anchorScrollScript, safetyMenuScript, burgerToggleScript, ...extraScripts].join('');
   if (/<\/body>/i.test(processed)) {
     processed = processed.replace(/<\/body>/i, `${scriptBundle}</body>`);
   } else {
@@ -376,7 +377,7 @@ export default function PreviewPage({ params }: { params: Promise<{ siteId: stri
     <iframe
       title="Live Preview"
       style={{ border: 0, width: '100vw', height: '100vh' }}
-      sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-popups allow-forms"
+      sandbox="allow-scripts allow-same-origin allow-pointer-lock allow-popups allow-forms allow-top-navigation-by-user-activation"
       srcDoc={html}
     />
   );

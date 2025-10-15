@@ -40,6 +40,13 @@ function injectEnhancements(html: string): string {
     '<style id="site-enhancements-css">',
     '  .reveal-on-scroll{opacity:0;transform:translateY(14px) scale(.98);transition:opacity .6s ease,transform .6s ease;will-change:transform,opacity}',
     '  .reveal-on-scroll.is-visible{opacity:1;transform:none}',
+    '  /* Normalize section layout: keep content in a centered container */',
+    '  section > .max-w-6xl{width:100%}',
+    '  /* Tame oversized CTAs from model output */',
+    '  button, a[role="button"], .btn, a.btn{font-size:clamp(.9rem,1.1vw,1rem);padding:.6rem 1rem;border-radius:.75rem}',
+    '  .btn-lg, a.btn-lg, .cta-large{font-size:clamp(1rem,1.2vw,1.05rem);padding:.7rem 1.1rem;border-radius:.9rem}',
+    '  /* Ensure inline images don’t overflow and look consistent */',
+    '  img{max-width:100%;height:auto;display:block}',
     '  .section-accent-aurora{position:relative;overflow:hidden}',
     "  .section-accent-aurora::before{content:'';position:absolute;inset:-25%;pointer-events:none;filter:blur(40px);background:radial-gradient(40% 40% at 20% 20%,rgba(99,102,241,.35),transparent 70%),radial-gradient(40% 40% at 80% 20%,rgba(236,72,153,.25),transparent 70%),radial-gradient(40% 40% at 50% 80%,rgba(34,197,94,.2),transparent 70%)}",
     '  .section-accent-grid{background-image:linear-gradient(rgba(148,163,184,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(148,163,184,.12) 1px,transparent 1px);background-size:28px 28px;background-position:-14px -14px}',
@@ -1247,8 +1254,10 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         }
         if (sectionImages.length && !/<img\b/i.test(cleanHtml)) {
           const safeAlt = (section.title || section.type || 'image').toString().slice(0, 60);
-          const imgs = sectionImages.map((src) => `<img src="${src}" alt="${safeAlt}" loading="lazy" class="w-full h-40 sm:h-48 object-cover rounded-xl shadow-md" />`).join('');
-          cleanHtml += `<div class="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6">${imgs}</div>`;
+          const imgs = sectionImages
+            .map((src) => `<img src="${src}" alt="${safeAlt}" loading="lazy" class="w-full aspect-[16/9] md:aspect-[21/9] object-cover rounded-xl shadow-md" />`)
+            .join('');
+          cleanHtml += `<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8"><div class="grid grid-cols-2 md:grid-cols-3 gap-4 mt-6">${imgs}</div></div>`;
         }
         const baseCandidate = sanitizeIdCandidate(section.type || section.title || `section-${i + index + 1}`) || `section-${i + index + 1}`;
         let candidate = baseCandidate;
@@ -1282,9 +1291,21 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
             }
             return `<section${updated}>`;
           });
+          // Ensure a centered container wrapper exists to avoid odd full-width stripes
+          const cap = cleanHtml.match(/^<section\b[^>]*>([\s\S]*?)<\/section>$/i);
+          if (cap) {
+            const inner = cap[1] || '';
+            const hasContainer = /max-w-\d|\bcontainer\b/.test(inner);
+            if (!hasContainer) {
+              cleanHtml = cleanHtml.replace(
+                /^<section\b([^>]*)>([\s\S]*?)<\/section>$/i,
+                (all, a, content) => `<section${a}><div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8\">${content}</div></section>`
+              );
+            }
+          }
         } else {
           const sectionTypeAttr = section.type ? ` data-section-type=\"${section.type}\"` : '';
-          cleanHtml = `<section id=\"${candidate}\" class=\"reveal-on-scroll ${accentClass}\"${sectionTypeAttr}>${cleanHtml}</section>`;
+          cleanHtml = `<section id=\"${candidate}\" class=\"reveal-on-scroll ${accentClass}\"${sectionTypeAttr}><div class=\"max-w-6xl mx-auto px-4 sm:px-6 lg:px-8\">${cleanHtml}</div></section>`;
         }
         const sectionLower = cleanHtml.toLowerCase();
         if (sectionLower.includes('cookie') && (sectionLower.includes('accept') || sectionLower.includes('consent'))) {

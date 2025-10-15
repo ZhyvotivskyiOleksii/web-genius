@@ -2,7 +2,7 @@
 
 import React, { useActionState, useState, useEffect, useRef, useMemo, useCallback } from "react";
 import type { Session, AuthChangeEvent } from "@supabase/supabase-js";
-import { generateWebsiteAction } from "@/app/actions";
+import { generateWebsiteAction, ensureProjectAction, upsertSiteFilesAction } from "@/app/actions";
 import { SiteGeneratorForm } from "@/components/site-generator-form";
 import { SitePreview } from "@/components/site-preview";
 import { FallingCodeBg } from "@/components/falling-code-bg";
@@ -270,32 +270,22 @@ export default function Home() {
       // If user is signed in, persist and redirect to editor
       if (userId) {
         try {
-          const sb = await getSupabase();
-          if (!sb) { setShowPreview(true); return; }
           const slug = state.site.domain;
-          const { data: found } = await sb
-            .from('sites')
-            .select('id')
-            .eq('user_id', userId)
-            .eq('slug', slug)
-            .maybeSingle();
-          let id = found?.id as string | undefined;
-          if (!id) {
-            const { data: created, error: insErr } = await sb
-              .from('sites')
-              .insert({
-                user_id: userId,
-                name: slug,
-                slug,
-                types: state.site.types || [],
-                meta: { domain: slug },
-                total_input_tokens: state.site.usage?.inputTokens || 0,
-                total_output_tokens: state.site.usage?.outputTokens || 0,
-              })
-              .select('id')
-              .single();
-            if (insErr) throw insErr;
-            id = created?.id;
+          // Use server action with service role to ensure RLS does not block initial persist
+          let id: string | undefined;
+          {
+            const fd = new FormData();
+            fd.set('userId', userId);
+            fd.set('slug', slug);
+            fd.set('name', slug);
+            try { fd.set('types', JSON.stringify(state.site.types || [])); } catch { fd.set('types', '[]'); }
+            fd.set('domain', slug);
+            if (state.site.usage?.inputTokens) fd.set('initialInputTokens', String(state.site.usage.inputTokens));
+            if (state.site.usage?.outputTokens) fd.set('initialOutputTokens', String(state.site.usage.outputTokens));
+            const res: any = await ensureProjectAction({}, fd as any);
+            if (res?.success && res.siteId) {
+              id = res.siteId as string;
+            }
           }
           if (!id) { setShowPreview(true); return; }
           // Cache to sessionStorage with safety limits to avoid QuotaExceeded
@@ -375,22 +365,18 @@ export default function Home() {
             const mime = isImg ? guessMime(p) : 'application/octet-stream';
             return `data:${mime};base64,${b64}`;
           };
-          const rows = Object.entries(state.site.files).map(([path, content]) => ({
-            site_id: id!,
-            path,
-            content: toDataUrlIfNeeded(path, content),
-            updated_by: userId,
-          }));
-          if (rows.length) {
-            const chunkSize = 40;
-            for (let i = 0; i < rows.length; i += chunkSize) {
-              const slice = rows.slice(i, i + chunkSize);
-              const { error: filesErr } = await sb.from('site_files').upsert(slice, { onConflict: 'site_id,path' });
-              if (filesErr) {
-                console.error('site_files upsert failed:', filesErr);
-                throw filesErr;
-              }
+          // Persist files via server action (handles chunking and service key)
+          {
+            const changes: Record<string, string> = {};
+            for (const [p, v] of Object.entries(state.site.files)) {
+              changes[p] = toDataUrlIfNeeded(p, v);
             }
+            const fd2 = new FormData();
+            fd2.set('userId', userId);
+            fd2.set('siteId', id!);
+            fd2.set('changes', JSON.stringify(changes));
+            const saved: any = await upsertSiteFilesAction({}, fd2 as any);
+            if (!saved?.success) throw new Error(saved?.error || 'Site files upsert failed');
           }
           redirectedRef.current = true;
           router.push(`/editor/${id}`);
