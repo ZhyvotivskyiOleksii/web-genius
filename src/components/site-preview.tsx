@@ -1283,22 +1283,25 @@ export function SitePreview({
 
   const pendingSavesRef = useRef<Record<string, string>>({});
   const flushSavesDebounced = useMemo(() => debounce(async () => {
-    const sb = await getSupabase();
-    if (!sb || !siteId || !userId) return;
+    if (!siteId || !userId) return;
     const entries = Object.entries(pendingSavesRef.current);
     if (!entries.length) return;
-    const batch = entries.map(([path, content]) => ({ site_id: siteId!, path, content, updated_by: userId }));
+    const changes: Record<string, string> = {};
+    entries.forEach(([path, content]) => { changes[path] = content; });
     try {
       pendingSavesRef.current = {};
-      const chunkSize = 40;
-      for (let i = 0; i < batch.length; i += chunkSize) {
-        const slice = batch.slice(i, i + chunkSize);
-        await sb.from('site_files').upsert(slice, { onConflict: 'site_id,path' });
-      }
-      await sb.from('sites').update({ updated_at: new Date().toISOString(), last_opened_at: new Date().toISOString() }).eq('id', siteId);
+      const fd = new FormData();
+      fd.set('userId', userId);
+      fd.set('siteId', siteId);
+      fd.set('changes', JSON.stringify(changes));
+      const res: any = await upsertSiteFilesAction({}, fd as any);
+      if (!res?.success) throw new Error(res?.error || 'Server upsert failed');
+      // best-effort touch site row (optional)
+      const sb = await getSupabase();
+      try { await sb?.from('sites').update({ updated_at: new Date().toISOString(), last_opened_at: new Date().toISOString() }).eq('id', siteId); } catch {}
     } catch (e) {
       // keep pending in case of failure
-      batch.forEach(({ path, content }) => { (pendingSavesRef.current as any)[path] = content; });
+      entries.forEach(([path, content]) => { (pendingSavesRef.current as any)[path] = content as string; });
       console.error('Autosave failed', e);
     }
   }, 800), [siteId, userId]);

@@ -261,7 +261,9 @@ export default function Home() {
 
   useEffect(() => {
     (async () => {
-      if (!state.success || !state.site || redirectedRef.current) {
+      // Redirect/persist only for the CURRENT generation.
+      // Prevents bouncing back to the previous site when returning to Home.
+      if (!pendingGeneration || !state.success || !state.site || redirectedRef.current) {
         if (!isPending && pendingGeneration && (!state.success || state.error)) {
           setPendingGeneration(false);
         }
@@ -389,7 +391,7 @@ export default function Home() {
           setPendingGeneration(false);
         }
       } else {
-        // Not signed in: fallback to inline preview
+        // Not signed in: fallback to inline preview (only for current generation)
         setShowPreview(true);
         setPendingGeneration(false);
       }

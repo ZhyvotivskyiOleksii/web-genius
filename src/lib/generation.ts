@@ -110,17 +110,21 @@ function injectEnhancements(html: string): string {
 function normalizeImageTags(html: string, pool: string[], extras?: string[]): string {
   if (!html || !pool || pool.length === 0) return html;
   try {
-    const combined = [...pool, ...((extras || []).filter(Boolean))];
-    const first = combined[0] || pool[0];
+    const combined = Array.from(new Set([...(pool || []), ...((extras || []).filter(Boolean))]));
     const set = new Set(combined.map((p) => p.replace(/^\/?/, '')));
+    const hash = (s: string) => {
+      let h = 2166136261;
+      for (let i = 0; i < s.length; i++) h = (h ^ s.charCodeAt(i)) * 16777619;
+      return Math.abs(h >>> 0);
+    };
     return html.replace(/<img\b([^>]*?)src=("|')([^"']+)(\2)([^>]*)>/gi, (m, pre, q, url, _q2, post) => {
       const u = (url || '').trim();
       if (!u || /^https?:/i.test(u) || /^data:/i.test(u)) return m;
-      // Do not rewrite explicit logo or favicon assets
       if (/\/logo-(bar|casino)\//i.test(u) || /\/favicon\//i.test(u) || /(^|\/)logo(\.|\b)/i.test(u)) return m;
       const normalized = u.replace(/^\/?/, '');
       if (set.has(normalized)) return m.replace(url, normalized);
-      return `<img${pre}src=${q}${first}${q}${post}>`;
+      const pick = combined[hash(normalized) % combined.length] || combined[0];
+      return `<img${pre}src=${q}${pick}${q}${post}>`;
     });
   } catch {
     return html;
@@ -1420,7 +1424,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
       }
     }
 
-    // Bundle only one game's assets (no wrapper pages)
+    // Bundle one game's assets and create a wrapper page with iframe
     if (isGameSite && selectedGameFolder) {
       try {
         const gameAssets = await getFilesRecursively(path.join(sourceGamesDir, selectedGameFolder));
@@ -1431,6 +1435,21 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         }
       } catch (error) {
         console.warn(`Failed to attach game assets for ${selectedGameFolder}:`, error);
+      }
+      try {
+        const disclaimerBlock = '<div class="mt-6 text-xs text-slate-500 dark:text-slate-400">This is a social gaming demo for adults 18+ only. No real‑money gambling or prizes. Practice does not imply future success.</div>';
+        const gamePage = await generateGameFullPageHtml({
+          siteName: siteName,
+          pageTitle: `Play Demo — ${siteName}`,
+          gameIframePath: `games/${selectedGameFolder}/game.html`,
+          disclaimerHtml: disclaimerBlock,
+          language: languageName,
+          faviconPath: selectedFaviconPath,
+          logoPath: selectedLogoAsset?.webPath,
+        });
+        files['game.html'] = injectEnhancements(normalizeImageTags(gamePage.html, allImagePoolGlobal.length ? allImagePoolGlobal : siteImagePool, [selectedLogoAsset?.webPath || '', selectedFaviconPath || '']));
+      } catch (e) {
+        console.warn('Wrapper game page generation failed:', e);
       }
     }
 
@@ -1443,7 +1462,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
           const cover = imagePaths.length ? imagePaths[Math.floor(Math.random() * imagePaths.length)] : undefined;
           gamePageEntries = [{
             title: stripEmojis(`Game: ${selectedGameFolder.replace(/[-_]/g, ' ')}`) || 'Game',
-            href: `games/${selectedGameFolder}/game.html`,
+            href: `game.html`,
             cover,
           }];
         }
@@ -1463,6 +1482,7 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
         hasGame: isGameSite,
         logoPath: selectedLogoAsset?.webPath,
         imageUrls: siteImagePool,
+        themeMode: themeMode,
         gamePages: gamePageEntries,
         anchors: anchorsPayload,
         faviconPath: selectedFaviconPath,
