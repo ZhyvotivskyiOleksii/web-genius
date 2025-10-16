@@ -653,64 +653,27 @@ export function SitePreview({
   useEffect(() => {
     (async () => {
       if (!userId || siteId) return;
-      const sb = await getSupabase();
-      if (!sb) return;
       try {
         setIsPersisting(true);
-        // Try find existing by (user, slug)
-        const slug = slugName;
-        const { data: found, error: findErr } = await sb
-          .from('sites')
-          .select('id')
-          .eq('user_id', userId)
-          .eq('slug', slug)
-          .maybeSingle();
-        let id = found?.id as string | undefined;
-        if (!id) {
-          const { data: created, error: insErr } = await sb
-            .from('sites')
-            .insert({
-              user_id: userId,
-              name: displayName,
-              slug,
-              types: (site as any).types || [],
-              meta: { domain: site.domain },
-            })
-            .select('id')
-            .single();
-          if (insErr) {
-            console.error('Supabase insert error (sites):', insErr);
-            throw new Error(insErr.message || 'Insert failed');
-          }
-          id = created?.id;
-        } else {
-          // keep metadata fresh
-          const { error: updErr } = await sb.from('sites').update({ name: displayName, updated_at: new Date().toISOString() }).eq('id', id);
-          if (updErr) {
-            console.error('Supabase update error (sites):', updErr);
-          }
-        }
-        if (!id) throw new Error('Failed to create site');
+        // Ensure project via server action (bypasses RLS)
+        const fd = new FormData();
+        fd.set('userId', userId);
+        fd.set('slug', slugName);
+        fd.set('name', displayName);
+        try { fd.set('types', JSON.stringify((site as any).types || [])); } catch { fd.set('types', '[]'); }
+        fd.set('domain', site.domain || slugName);
+        const res: any = await ensureProjectAction({}, fd as any);
+        const id = res?.siteId as string | undefined;
+        if (!id) throw new Error(res?.error || 'Failed to ensure project');
         setSiteId(id);
-        // Bulk upsert initial files (encode binaries as data:URL)
+        // Bulk upsert files via server action
         const serialized = serializeFilesForTransfer(site.files as any);
-        const rows = Object.entries(serialized).map(([path, content]) => ({
-          site_id: id,
-          path,
-          content: String(content || ''),
-          updated_by: userId,
-        }));
-        if (rows.length) {
-          const chunkSize = 40;
-          for (let i = 0; i < rows.length; i += chunkSize) {
-            const slice = rows.slice(i, i + chunkSize);
-            const { error: upErr } = await sb.from('site_files').upsert(slice, { onConflict: 'site_id,path' });
-            if (upErr) {
-              console.error('Supabase upsert error (site_files):', upErr);
-              break;
-            }
-          }
-        }
+        const fd2 = new FormData();
+        fd2.set('userId', userId);
+        fd2.set('siteId', id);
+        fd2.set('changes', JSON.stringify(serialized));
+        const res2: any = await upsertSiteFilesAction({}, fd2 as any);
+        if (!res2?.success) throw new Error(res2?.error || 'Initial upsert failed');
       } catch (e: any) {
         console.error('Persist init failed', e?.message || e);
         setPersistError(e?.message || 'Failed to persist');
