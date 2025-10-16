@@ -242,13 +242,24 @@ const guessMimeFromPath = (p: string): string => {
 };
 
 // Convert a Site files map to a JSON-safe string map, encoding binary images as data URLs
+// Also skip empty placeholder entries (""), which otherwise produce 0-byte files on hosting.
 const serializeFilesForTransfer = (files: Record<string, any>): Record<string, string> => {
   const out: Record<string, string> = {};
   Object.entries(files).forEach(([p, raw]) => {
     let val = toStringContent(raw);
-    if (/\.html?$/i.test(p)) {
-      val = stripPreviewScripts(val);
+    if (typeof val === 'string') {
+      // Normalize CRLF and trim once for emptiness check
+      const trimmed = val.replace(/\r\n/g, '\n').trim();
+      // Skip empty placeholders entirely
+      if (trimmed.length === 0) return;
+      // Strip preview-only scripts from HTML
+      if (/\.html?$/i.test(p)) {
+        val = stripPreviewScripts(trimmed);
+      } else {
+        val = trimmed;
+      }
     }
+    // Keep data URIs as-is
     if (typeof val === 'string' && val.startsWith('data:')) {
       out[p] = val;
       return;
@@ -257,12 +268,15 @@ const serializeFilesForTransfer = (files: Record<string, any>): Record<string, s
     if (/\.(png|jpe?g|gif|webp|avif|svg|ico)$/i.test(p)) {
       const bytes = toUint8Array(raw);
       if (bytes) {
-        const b64 = typeof Buffer !== 'undefined' ? Buffer.from(bytes).toString('base64') : btoa(String.fromCharCode(...Array.from(bytes)));
+        const b64 = typeof Buffer !== 'undefined'
+          ? Buffer.from(bytes).toString('base64')
+          : btoa(String.fromCharCode(...Array.from(bytes)));
         out[p] = `data:${guessMimeFromPath(p)};base64,${b64}`;
         return;
       }
     }
-    out[p] = val;
+    // Fallback: pass through as string
+    out[p] = typeof val === 'string' ? val : '';
   });
   return out;
 };

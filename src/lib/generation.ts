@@ -1500,6 +1500,20 @@ export async function generateSingleSite(prompt: string, siteName: string, websi
           .replace(/href=("|')\.?\/?game(?:\/index\.html|\/|\.html)?\1/gi, (m, q) => `href=${q}${firstHref}${q}`);
       };
       indexHtml = fixGameHref(indexHtml);
+      // Ensure a visible link to the game exists when applicable
+      if (isGameSite && (gamePageEntries[0]?.href || ctaTarget)) {
+        const targetHref = gamePageEntries[0]?.href || (ctaTarget as string);
+        if (!new RegExp(`href=("|')${targetHref.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\1`).test(indexHtml)) {
+          // Try to append to the first nav
+          const navRx = /<nav\b[^>]*>([\s\S]*?)<\/nav>/i;
+          if (navRx.test(indexHtml)) {
+            indexHtml = indexHtml.replace(navRx, (m, inner) => m.replace(inner, `${inner}\n<a href=\"${targetHref}\" class=\"inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-500\">Play Demo</a>`));
+          } else {
+            // Fallback: add a CTA before </main>
+            indexHtml = indexHtml.replace(/<\/main>/i, `<div class=\"mt-6\"><a href=\"${targetHref}\" class=\"inline-flex items-center gap-2 px-5 py-3 text-sm rounded-xl font-semibold bg-indigo-600 text-white hover:bg-indigo-500\">Play Demo</a></div></main>`);
+          }
+        }
+      }
       if (!isGameSite) {
         // Safety: remove accidental links to game.html if model added any.
         indexHtml = indexHtml

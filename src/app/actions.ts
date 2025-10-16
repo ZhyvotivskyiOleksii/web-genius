@@ -532,6 +532,23 @@ export async function downloadZipAction(siteData: { domain: string, files: Recor
         const folder = zip.folder(siteData.domain);
 
         if (folder) {
+            // Helper: normalize a path from CSS/HTML to a zip-friendly relative path under images/ or games/
+            const normalizeAssetPath = (raw: string): string | null => {
+              try {
+                const u = (raw || '').trim();
+                if (!u || /^data:/i.test(u) || /^https?:/i.test(u)) return null;
+                // remove quotes and parameters
+                let p = u.replace(/["']/g, '').split('?')[0].split('#')[0];
+                // strip leading ./ or /
+                p = p.replace(/^\.?\//, '');
+                // collapse ../ segments conservatively; keep only tail starting at images/ or games/
+                const idxImg = p.toLowerCase().lastIndexOf('images/');
+                const idxGame = p.toLowerCase().lastIndexOf('games/');
+                const idx = idxImg >= 0 ? idxImg : idxGame;
+                if (idx < 0) return null;
+                return p.slice(idx);
+              } catch { return null; }
+            };
             const stripPreviewArtifacts = (html: string): string => {
               try {
                 if (!html || typeof html !== 'string') return html;
@@ -550,6 +567,10 @@ export async function downloadZipAction(siteData: { domain: string, files: Recor
             const addFile = (p: string, c: string) => {
               if (/\.html?$/i.test(p)) {
                 c = stripPreviewArtifacts(c);
+              }
+              if (typeof c === 'string' && c.trim().length === 0) {
+                // Skip empty placeholders entirely
+                return;
               }
               if (c.startsWith('data:')) {
                 const base64Data = c.split(',')[1];
@@ -573,6 +594,16 @@ export async function downloadZipAction(siteData: { domain: string, files: Recor
             while ((m = rxGames.exec(html))) {
               referencedAssets.add(m[3]);
             }
+              }
+              if (/\.css$/i.test(pathKey)) {
+                const css = String(content || '');
+                // url(...) references; match url("/images/..."), url(../images/..), url(images/...)
+                const rxUrl = /url\(([^)]+)\)/gi;
+                let um: RegExpExecArray | null;
+                while ((um = rxUrl.exec(css))) {
+                  const norm = normalizeAssetPath((um[1] || '').trim().replace(/^['\"]|['\"]$/g, ''));
+                  if (norm) referencedAssets.add(norm);
+                }
               }
             }
             // 2) Attach missing referenced images from public/
@@ -1171,8 +1202,21 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
   try {
     const files: Record<string, string> = JSON.parse(parsed.data.files);
 
-    // Build ZIP from files (+ enrich with referenced public assets like images/* and games/*)
+    // Build ZIP from files (+ enrich with referenced public assets like images/* and games/*, including CSS url(...))
     const zip = new JSZip();
+    const normalizeAssetPath = (raw: string): string | null => {
+      try {
+        const u = (raw || '').trim();
+        if (!u || /^data:/i.test(u) || /^https?:/i.test(u)) return null;
+        let p = u.replace(/["']/g, '').split('?')[0].split('#')[0];
+        p = p.replace(/^\.?\//, '');
+        const idxImg = p.toLowerCase().lastIndexOf('images/');
+        const idxGame = p.toLowerCase().lastIndexOf('games/');
+        const idx = idxImg >= 0 ? idxImg : idxGame;
+        if (idx < 0) return null;
+        return p.slice(idx);
+      } catch { return null; }
+    };
     const stripPreviewArtifacts = (html: string): string => {
       try {
         if (!html || typeof html !== 'string') return html;
@@ -1187,10 +1231,11 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
         return out;
       } catch { return html; }
     };
-    // 1) Add provided files
+    // 1) Add provided files (skip empty placeholders)
     for (const [p, c] of Object.entries(files)) {
       let content = String(c ?? '');
       if (/\.html?$/i.test(p)) content = stripPreviewArtifacts(content);
+      if (content.trim().length === 0) continue; // skip 0-byte placeholders
       if (typeof content === 'string' && content.startsWith('data:')) {
         const b64 = content.split(',')[1];
         zip.file(p, b64, { base64: true });
@@ -1198,9 +1243,12 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
         zip.file(p, content);
       }
     }
-    // 2) Collect referenced assets from HTML and add missing ones from public/
+    // 2) Collect referenced assets from HTML & CSS and add missing ones from public/
     try {
       const referenced = new Set<string>();
+      // Keep a supplemental map of assets we pull from public so that
+      // the per-file fallback upload can include them too (when extract is unavailable)
+      const supplementalAssets: Map<string, Buffer> = new Map();
       for (const [p, c] of Object.entries(files)) {
         if (!/\.html?$/i.test(p)) continue;
         const html = String(c || '');
@@ -1210,6 +1258,16 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
         let m: RegExpExecArray | null;
         while ((m = rxImg.exec(html))) referenced.add(m[3]);
         while ((m = rxGame.exec(html))) referenced.add(m[3]);
+      }
+      for (const [p, c] of Object.entries(files)) {
+        if (!/\.css$/i.test(p)) continue;
+        const css = String(c || '');
+        const rxUrl = /url\(([^)]+)\)/gi;
+        let um: RegExpExecArray | null;
+        while ((um = rxUrl.exec(css))) {
+          const norm = normalizeAssetPath((um[1] || '').trim().replace(/^['\"]|['\"]$/g, ''));
+          if (norm) referenced.add(norm);
+        }
       }
       const basePublic = path.join(process.cwd(), 'public');
       // images first
@@ -1222,6 +1280,7 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
           const disk = path.join(basePublic, asset);
           const buf = await fs.readFile(disk);
           zip.file(asset, buf);
+          supplementalAssets.set(asset, buf);
         } catch {}
       }
       // games: add entire folder if any file under it referenced
@@ -1243,12 +1302,16 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
               } else {
                 const buf = await fs.readFile(abs);
                 zip.file(path.posix.join('games', folder, r.split(path.sep).join('/')), buf);
+                supplementalAssets.set(path.posix.join('games', folder, r.split(path.sep).join('/')), buf);
               }
             }
           } catch {}
         };
         await walk(gameDir);
       }
+      // Attach the supplemental map to the zip object for fallback branch via a symbol property
+      // (simple approach: capture in closure scope)
+      (zip as any)._wgSupplemental = supplementalAssets;
     } catch {}
     const zipBlobBase64 = await zip.generateAsync({ type: 'base64' });
     const zipBuffer = Buffer.from(zipBlobBase64, 'base64');
@@ -1360,41 +1423,45 @@ export async function publishToCpanelAction(prev: any, formData: FormData): Prom
             default: return 'application/octet-stream';
           }
         };
-        for (const [path, contentRaw] of Object.entries(files)) {
-          const content = /\.html?$/i.test(path) ? stripPreviewArtifacts(String(contentRaw ?? '')) : String(contentRaw ?? '');
-          const parts = path.split('/');
+        // Merge original files + supplemental assets (from public) into one iterable
+        const supplemental: Map<string, Buffer> = (zip as any)._wgSupplemental || new Map();
+        const entries: Array<{ path: string; blob: Blob; dir: string; name: string }> = [];
+        // Original provided files
+        for (const [p, raw] of Object.entries(files)) {
+          let content = /\.html?$/i.test(p) ? stripPreviewArtifacts(String(raw ?? '')) : String(raw ?? '');
+          if (content.trim().length === 0) continue; // skip empty
+          const parts = p.split('/');
           const name = parts.pop() as string;
           const dir = parts.length ? `${docRoot}/${parts.join('/')}` : docRoot;
-          await ensureDir(dir);
-          const isData = typeof content === 'string' && content.startsWith('data:');
-          // Use upload_files для всех типов (и текстов), т.к. у некоторых хостов save_file_content отключён
+          const isData = content.startsWith('data:');
           if (isData) {
             const bin = Buffer.from(content.split(',')[1] || '', 'base64');
-            const f = new FormData();
-            f.append('dir', dir.replace(/^\/+/, ''));
-            f.append('file-1', new Blob([bin]), name);
-            let resp = await fetch(`${base}/execute/Fileman/upload_files`, { method: 'POST', headers: authHeader as any, body: f as any });
-            if (!resp.ok) {
-              const f2 = new FormData();
-              f2.append('dir', dir);
-              f2.append('file-1', new Blob([bin]), name);
-              resp = await fetch(`${base}/execute/Fileman/upload_files`, { method: 'POST', headers: authHeader as any, body: f2 as any });
-              if (!resp.ok) throw new Error('upload_files failed');
-            }
+            entries.push({ path: p, dir, name, blob: new Blob([bin]) });
           } else {
-            const text = String(content);
             const mime = guessMime(name);
-            const f = new FormData();
-            f.append('dir', dir.replace(/^\/+/, ''));
-            f.append('file-1', new Blob([Buffer.from(text, 'utf8')], { type: mime }), name);
-            let resp = await fetch(`${base}/execute/Fileman/upload_files`, { method: 'POST', headers: authHeader as any, body: f as any });
-            if (!resp.ok) {
-              const f2 = new FormData();
-              f2.append('dir', dir);
-              f2.append('file-1', new Blob([Buffer.from(text, 'utf8')], { type: mime }), name);
-              resp = await fetch(`${base}/execute/Fileman/upload_files`, { method: 'POST', headers: authHeader as any, body: f2 as any });
-              if (!resp.ok) throw new Error('upload_files failed');
-            }
+            entries.push({ path: p, dir, name, blob: new Blob([Buffer.from(content, 'utf8')], { type: mime }) });
+          }
+        }
+        // Supplemental assets from public (binary buffers)
+        for (const [sp, buf] of supplemental) {
+          const parts = sp.split('/');
+          const name = parts.pop() as string;
+          const dir = parts.length ? `${docRoot}/${parts.join('/')}` : docRoot;
+          entries.push({ path: sp, dir, name, blob: new Blob([buf]) });
+        }
+        // Upload all entries
+        for (const e of entries) {
+          await ensureDir(e.dir);
+          const f = new FormData();
+          f.append('dir', e.dir.replace(/^\/+/, ''));
+          f.append('file-1', e.blob, e.name);
+          let resp = await fetch(`${base}/execute/Fileman/upload_files`, { method: 'POST', headers: authHeader as any, body: f as any });
+          if (!resp.ok) {
+            const f2 = new FormData();
+            f2.append('dir', e.dir);
+            f2.append('file-1', e.blob, e.name);
+            resp = await fetch(`${base}/execute/Fileman/upload_files`, { method: 'POST', headers: authHeader as any, body: f2 as any });
+            if (!resp.ok) throw new Error('upload_files failed');
           }
           uploaded++;
         }
